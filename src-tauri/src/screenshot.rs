@@ -120,9 +120,17 @@ pub async fn capture_focused_window(
     {
         let (_, _, monitor) = get_target_monitor();
 
-        image = match monitor.capture_image() {
-            Ok(image) => image,
-            Err(_) => {
+        let focused_image = os::utils::get_focused_window().and_then(|window_id| {
+            let window_list = Window::all().ok()?;
+            window_list
+                .into_iter()
+                .find(|window| window.id().ok() == Some(window_id))
+                .and_then(|window| window.capture_image().ok())
+        });
+
+        image = match focused_image.or_else(|| monitor.capture_image().ok()) {
+            Some(image) => image,
+            None => {
                 return Err(String::from(
                     "[capture_focused_window] Failed to capture image",
                 ));
@@ -319,7 +327,7 @@ pub async fn switch_always_on_top(window_id: u32) -> bool {
 
     #[cfg(target_os = "linux")]
     {
-        os::utils::switch_always_on_top();
+        os::utils::switch_always_on_top(window_id);
     }
 
     true
