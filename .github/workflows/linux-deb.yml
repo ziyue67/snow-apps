@@ -36,7 +36,8 @@ jobs:
       - name: Build custom Excalidraw
         working-directory: ${{ github.workspace }}
         run: |
-          git clone --depth 1 https://github.com/mg-chao/excalidraw.git excalidraw
+          git clone --depth 1 --branch 20250630_custom_master \
+            https://github.com/mg-chao/excalidraw.git excalidraw
           npm install --global yarn@1.22.22 pnpm@10.8.1
           cd excalidraw
           yarn install --ignore-engines
