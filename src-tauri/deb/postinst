@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+library="/usr/lib/Snow Shot/lib/libonnxruntime.so.1.20.0"
+link="/usr/lib/x86_64-linux-gnu/libonnxruntime.so.1"
+
+if [ -f "$library" ] && [ ! -e "$link" ]; then
+    ln -s "$library" "$link"
+fi
+
+exit 0
