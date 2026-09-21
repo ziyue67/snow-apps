@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+link="/usr/lib/x86_64-linux-gnu/libonnxruntime.so.1"
+target="/usr/lib/Snow Shot/lib/libonnxruntime.so.1.20.0"
+
+if [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then
+    rm -f "$link"
+fi
+
+exit 0
