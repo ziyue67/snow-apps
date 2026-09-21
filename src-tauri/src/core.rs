@@ -1,5 +1,7 @@
 use enigo::{Axis, Enigo, Mouse};
 use serde::Serialize;
+#[cfg(target_os = "linux")]
+use std::process::Command;
 use std::{
     env,
     path::PathBuf,
@@ -10,10 +12,9 @@ use tauri::{Manager, command};
 use tauri_plugin_clipboard;
 use tokio::{sync::Mutex, time::Duration};
 
-use crate::{
-    os::{self, free_drag::set_window_proc},
-    screenshot::get_target_monitor,
-};
+#[cfg(target_os = "windows")]
+use crate::os::free_drag::set_window_proc;
+use crate::{os, screenshot::get_target_monitor};
 
 #[command]
 pub async fn exit_app(window: tauri::Window, handle: tauri::AppHandle) {
@@ -23,6 +24,13 @@ pub async fn exit_app(window: tauri::Window, handle: tauri::AppHandle) {
 
 #[command]
 pub async fn get_selected_text() -> String {
+    #[cfg(target_os = "linux")]
+    if let Some(text) = get_linux_selected_text() {
+        if !text.trim().is_empty() {
+            return text;
+        }
+    }
+
     let text = match get_selected_text::get_selected_text() {
         Ok(text) => text,
         Err(_) => {
@@ -30,6 +38,30 @@ pub async fn get_selected_text() -> String {
         }
     };
     text
+}
+
+#[cfg(target_os = "linux")]
+fn get_linux_selected_text() -> Option<String> {
+    let commands: [(&str, &[&str]); 2] = [
+        ("wl-paste", &["--primary", "--no-newline"]),
+        ("xclip", &["-selection", "primary", "-o"]),
+    ];
+
+    for (program, args) in commands {
+        let output = match Command::new(program).args(args).output() {
+            Ok(output) => output,
+            Err(_) => continue,
+        };
+
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout).to_string();
+            if !text.trim().is_empty() {
+                return Some(text);
+            }
+        }
+    }
+
+    None
 }
 
 #[command]
@@ -273,8 +305,8 @@ pub async fn enable_free_drag(window: tauri::Window) {
 
 #[cfg(target_os = "linux")]
 #[command]
-pub async fn enable_free_drag() {
-    let _ = set_window_proc();
+pub async fn enable_free_drag(window: tauri::Window) {
+    let _ = window.start_dragging();
 }
 
 #[command]
