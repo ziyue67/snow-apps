@@ -54,7 +54,7 @@
     "bundle": {
         "active": true,
         "targets": [
-            "nsis"
+            "deb"
         ],
         "icon": [
             "icons/32x32.png",
@@ -66,6 +66,16 @@
         "resources": {
             "models/": "models/",
             "ffmpeg/": "ffmpeg/"
+        },
+        "linux": {
+            "deb": {
+                "depends": [
+                    "libxdo3",
+                    "libgbm1",
+                    "libpipewire-0.3-0t64 | libpipewire-0.3-0",
+                    "libonnxruntime1.23 | libonnxruntime"
+                ]
+            }
         }
     }
 }

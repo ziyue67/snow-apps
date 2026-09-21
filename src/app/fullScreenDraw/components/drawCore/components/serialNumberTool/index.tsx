@@ -19,11 +19,14 @@ import { useStateSubscriber } from '@/hooks/useStateSubscriber';
 import {
     BoundElement,
     ExcalidrawElement,
+    ExcalidrawLinearElement,
     ExcalidrawTextElement,
 } from '@mg-chao/excalidraw/element/types';
 import { AppState } from '@mg-chao/excalidraw/types';
 import Color from 'color';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
+
+const zeroAngle = 0 as ExcalidrawElement['angle'];
 
 const generateSerialNumber = (
     position: { x: number; y: number },
@@ -87,7 +90,7 @@ const generateSerialNumber = (
             y: position.y - ellipseHeight / 2,
             width: ellipseWidth,
             height: ellipseHeight,
-            angle: 0,
+            angle: zeroAngle,
             strokeColor: appState.currentItemStrokeColor,
             backgroundColor: ellipseBackgroundColor,
             fillStyle: appState.currentItemFillStyle,
@@ -118,7 +121,7 @@ const generateSerialNumber = (
             y: position.y - ellipseHeight / 2,
             width: ellipseWidth,
             height: ellipseHeight,
-            angle: 0,
+            angle: zeroAngle,
             strokeColor: appState.currentItemStrokeColor,
             backgroundColor: appState.currentItemBackgroundColor,
             fillStyle: appState.currentItemFillStyle,
@@ -146,7 +149,7 @@ const generateSerialNumber = (
             y: position.y - textHeight / 2 + 2,
             width: 32 * sizeScale,
             height: textHeight,
-            angle: 0,
+            angle: zeroAngle,
             strokeColor: appState.currentItemStrokeColor,
             backgroundColor: appState.currentItemBackgroundColor,
             fillStyle: appState.currentItemFillStyle,
@@ -170,6 +173,10 @@ const generateSerialNumber = (
             verticalAlign: 'center',
             containerId: null,
             originalText: number.toString(),
+            textStrokeColor: appState.currentItemTextStrokeColor,
+            textStrokeWidth: appState.currentItemTextStrokeWidth,
+            textBackgroundColor: appState.currentItemTextBackgroundColor,
+            textSerialNumberType: 'number',
             autoResize: false,
             lineHeight: 1.25 as ExcalidrawTextElement['lineHeight'],
             seed: 0,
@@ -263,7 +270,7 @@ export const SerialNumberTool: React.FC = () => {
                             ?.getSceneElements()
                             .filter((item) => item.id !== newElement.id),
                         appState: {
-                            newElement: undefined,
+                            newElement: null,
                         },
                         captureUpdate: 'NEVER',
                     });
@@ -320,12 +327,13 @@ export const SerialNumberTool: React.FC = () => {
                         },
                     ] as never[];
 
-                    item.startBinding = {
-                        elementId: serialNumberElement[0].id,
-                        focus: 0,
-                        gap: 8,
-                        fixedPoint: [1, 0.5],
-                    };
+                    Object.assign(item, {
+                        startBinding: {
+                            elementId: serialNumberElement[0].id,
+                            focus: 0,
+                            gap: 8,
+                        } satisfies ExcalidrawLinearElement['startBinding'],
+                    });
                 }
             });
         }

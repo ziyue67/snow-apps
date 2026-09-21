@@ -7,7 +7,7 @@
         "dev": "rimraf .next && next dev --turbopack -p 8301",
         "build": "next build",
         "start": "next start",
-        "update:excalidraw": "cd ../excalidraw && yarn build:package && cd ../snow-shot && pnpm update @mg-chao/excalidraw",
+        "update:excalidraw": "cd ../excalidraw && yarn build:packages && cd - >/dev/null && pnpm update @mg-chao/excalidraw",
         "lint": "next lint"
     },
     "dependencies": {

@@ -63,7 +63,7 @@ const DrawCacheLayerCore: React.FC<{
                     elements: [],
                     appState: {
                         // 清除在编辑中的元素
-                        newElement: undefined,
+                        newElement: null,
                         zoom: {
                             value: 1 as NormalizedZoomValue,
                         },
