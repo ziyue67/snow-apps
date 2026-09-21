@@ -71,6 +71,20 @@ jobs:
           export BINDGEN_EXTRA_CLANG_ARGS="-I$(gcc -print-file-name=include) -I/usr/include -I/usr/include/x86_64-linux-gnu"
           pnpm tauri build --bundles deb
 
+      - name: Verify Debian package
+        working-directory: snow-apps-linux
+        run: |
+          deb=$(find src-tauri/target/release/bundle/deb -name '*.deb' -print -quit)
+          test -n "$deb"
+          dpkg-deb -c "$deb" | grep -F 'usr/lib/Snow Shot/lib/libonnxruntime.so.1'
+          dpkg-deb -I "$deb" | grep -E 'postinst|prerm'
+          tmp=$(mktemp -d)
+          dpkg-deb -x "$deb" "$tmp"
+          LD_LIBRARY_PATH="$tmp/usr/lib/Snow Shot/lib" ldd "$tmp/usr/bin/app" | tee /tmp/snow-shot-ldd.txt
+          if grep -q 'not found' /tmp/snow-shot-ldd.txt; then
+            exit 1
+          fi
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
