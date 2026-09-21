@@ -51,6 +51,8 @@ jobs:
           tar -xzf onnxruntime.tgz
           mkdir -p src-tauri/lib
           cp -a onnxruntime-linux-x64-1.20.0/lib/. src-tauri/lib/
+          mkdir -p src-tauri/ffmpeg
+          touch src-tauri/ffmpeg/.gitkeep
 
       - name: Install frontend dependencies
         working-directory: snow-apps-linux
