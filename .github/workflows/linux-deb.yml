@@ -51,6 +51,11 @@ jobs:
           tar -xzf onnxruntime.tgz
           mkdir -p src-tauri/lib
           cp -a onnxruntime-linux-x64-1.20.0/lib/. src-tauri/lib/
+          cp --remove-destination \
+            onnxruntime-linux-x64-1.20.0/lib/libonnxruntime.so.1.20.0 \
+            src-tauri/lib/libonnxruntime.so.1
+          chmod +x src-tauri/deb/postinst src-tauri/deb/prerm
+          ls -l src-tauri/lib src-tauri/deb
           mkdir -p src-tauri/ffmpeg
           touch src-tauri/ffmpeg/.gitkeep
 
@@ -73,7 +78,7 @@ jobs:
           path: snow-apps-linux/src-tauri/target/release/bundle/deb/*.deb
 
       - name: Publish release
-        if: github.event_name == 'workflow_dispatch'
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: linux-v0.1.3-beta-20250702
