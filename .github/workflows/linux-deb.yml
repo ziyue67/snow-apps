@@ -41,7 +41,7 @@ jobs:
           npm install --global yarn@1.22.22 pnpm@10.8.1
           cd excalidraw
           yarn install --ignore-engines
-          yarn build:packages
+          yarn build:package
 
       - name: Prepare ONNX Runtime
         working-directory: snow-apps-linux
