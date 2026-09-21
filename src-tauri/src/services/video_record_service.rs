@@ -72,7 +72,18 @@ impl VideoRecordService {
                 Ok(resource_path) => resource_path,
                 Err(_) => panic!("[VideoRecordService] Failed to get resource path"),
             };
-            self.ffmpeg_path = Some(resource_path.join("ffmpeg.exe"));
+
+            #[cfg(target_os = "windows")]
+            let ffmpeg_name = "ffmpeg.exe";
+            #[cfg(not(target_os = "windows"))]
+            let ffmpeg_name = "ffmpeg";
+
+            let resource_ffmpeg = resource_path.join(ffmpeg_name);
+            self.ffmpeg_path = Some(if resource_ffmpeg.exists() {
+                resource_ffmpeg
+            } else {
+                PathBuf::from(ffmpeg_name)
+            });
         }
     }
 
@@ -170,23 +181,35 @@ impl VideoRecordService {
             command.arg("-hwaccel").arg("auto");
         }
 
-        // 设置输入格式为 gdigrab (Windows 屏幕录制)
-        command
-            .arg("-f")
-            .arg("gdigrab")
-            .arg("-framerate")
-            .arg(params.frame_rate.to_string())
-            // 设置偏移量
-            .arg("-offset_x")
-            .arg(params.min_x.to_string())
-            .arg("-offset_y")
-            .arg(params.min_y.to_string())
-            // 设置录制区域大小
-            .arg("-video_size")
-            .arg(format!("{}x{}", width, height))
-            // 输入源为桌面
-            .arg("-i")
-            .arg("desktop");
+        #[cfg(target_os = "windows")]
+        {
+            command
+                .arg("-f")
+                .arg("gdigrab")
+                .arg("-framerate")
+                .arg(params.frame_rate.to_string())
+                .arg("-offset_x")
+                .arg(params.min_x.to_string())
+                .arg("-offset_y")
+                .arg(params.min_y.to_string())
+                .arg("-video_size")
+                .arg(format!("{}x{}", width, height))
+                .arg("-i")
+                .arg("desktop");
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            command
+                .arg("-f")
+                .arg("x11grab")
+                .arg("-framerate")
+                .arg(params.frame_rate.to_string())
+                .arg("-video_size")
+                .arg(format!("{}x{}", width, height))
+                .arg("-i")
+                .arg(format!(":0.0+{},{}", params.min_x, params.min_y));
+        }
 
         // 音频输入计数器
         let mut audio_inputs: Vec<String> = Vec::new();
@@ -203,17 +226,26 @@ impl VideoRecordService {
 
         // 添加麦克风音频输入
         if params.enable_microphone {
-            let device_names = self.get_microphone_device_names();
+            #[cfg(target_os = "windows")]
+            {
+                let device_names = self.get_microphone_device_names();
 
-            if device_names.len() > 0 {
-                command.arg("-f").arg("dshow").arg("-i").arg(format!(
-                    "audio={}",
-                    if device_names.contains(&params.microphone_device_name) {
-                        params.microphone_device_name.clone()
-                    } else {
-                        device_names[0].clone()
-                    }
-                ));
+                if device_names.len() > 0 {
+                    command.arg("-f").arg("dshow").arg("-i").arg(format!(
+                        "audio={}",
+                        if device_names.contains(&params.microphone_device_name) {
+                            params.microphone_device_name.clone()
+                        } else {
+                            device_names[0].clone()
+                        }
+                    ));
+                    audio_inputs.push(format!("{}:a", audio_inputs.len() + 1));
+                }
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                command.arg("-f").arg("pulse").arg("-i").arg("default");
                 audio_inputs.push(format!("{}:a", audio_inputs.len() + 1));
             }
         }
@@ -357,72 +389,83 @@ impl VideoRecordService {
     }
 
     pub fn get_microphone_device_names(&self) -> Vec<String> {
-        let mut command = self.get_ffmpeg_command();
-        command
-            .arg("-list_devices")
-            .arg("true")
-            .arg("-f")
-            .arg("dshow")
-            .arg("-i")
-            .arg("dummy");
-
-        let mut device_names = Vec::new();
-
-        let mut child = match command.spawn() {
-            Ok(child) => child,
-            Err(e) => {
-                println!(
-                    "[get_microphone_device_names] Failed to spawn ffmpeg: {}",
-                    e
-                );
-                return device_names;
-            }
-        };
-
-        let output_iter = match child.iter() {
-            Ok(output) => output,
-            Err(e) => {
-                println!("[get_microphone_device_names] Failed to iter ffmpeg: {}", e);
-                return device_names;
-            }
-        };
-
-        // 创建正则表达式来匹配音频设备
-        // 格式: [dshow @ address] [info] "设备名称" (audio)
-        let device_regex = match Regex::new(r#"\[info\]\s+"([^"]+)"\s+\(audio\)"#) {
-            Ok(regex) => regex,
-            Err(e) => {
-                println!(
-                    "[get_microphone_device_names] Failed to create regex: {}",
-                    e
-                );
-                return device_names;
-            }
-        };
-
-        for line in output_iter {
-            match line {
-                FfmpegEvent::Log(_, line) => {
-                    // 使用正则表达式解析音频设备
-                    if let Some(captures) = device_regex.captures(&line) {
-                        if let Some(device_name) = captures.get(1) {
-                            let name = device_name.as_str().to_string();
-                            device_names.push(name.clone());
-                            println!("[get_microphone_device_names] Found audio device: {}", name);
-                        }
-                    }
-                }
-                _ => {}
-            }
+        #[cfg(not(target_os = "windows"))]
+        {
+            return vec!["default".to_string()];
         }
 
-        let _ = child.wait();
+        #[cfg(target_os = "windows")]
+        {
+            let mut command = self.get_ffmpeg_command();
+            command
+                .arg("-list_devices")
+                .arg("true")
+                .arg("-f")
+                .arg("dshow")
+                .arg("-i")
+                .arg("dummy");
 
-        println!(
-            "[get_microphone_device_names] Total found devices: {}",
-            device_names.len()
-        );
-        device_names
+            let mut device_names = Vec::new();
+
+            let mut child = match command.spawn() {
+                Ok(child) => child,
+                Err(e) => {
+                    println!(
+                        "[get_microphone_device_names] Failed to spawn ffmpeg: {}",
+                        e
+                    );
+                    return device_names;
+                }
+            };
+
+            let output_iter = match child.iter() {
+                Ok(output) => output,
+                Err(e) => {
+                    println!("[get_microphone_device_names] Failed to iter ffmpeg: {}", e);
+                    return device_names;
+                }
+            };
+
+            // 创建正则表达式来匹配音频设备
+            // 格式: [dshow @ address] [info] "设备名称" (audio)
+            let device_regex = match Regex::new(r#"\[info\]\s+"([^"]+)"\s+\(audio\)"#) {
+                Ok(regex) => regex,
+                Err(e) => {
+                    println!(
+                        "[get_microphone_device_names] Failed to create regex: {}",
+                        e
+                    );
+                    return device_names;
+                }
+            };
+
+            for line in output_iter {
+                match line {
+                    FfmpegEvent::Log(_, line) => {
+                        // 使用正则表达式解析音频设备
+                        if let Some(captures) = device_regex.captures(&line) {
+                            if let Some(device_name) = captures.get(1) {
+                                let name = device_name.as_str().to_string();
+                                device_names.push(name.clone());
+                                println!(
+                                    "[get_microphone_device_names] Found audio device: {}",
+                                    name
+                                );
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            let _ = child.wait();
+
+            println!(
+                "[get_microphone_device_names] Total found devices: {}",
+                device_names.len()
+            );
+            device_names
+        }
     }
 
     pub fn kill(&mut self) -> Result<()> {
