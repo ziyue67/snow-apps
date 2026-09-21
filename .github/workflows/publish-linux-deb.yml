@@ -7,9 +7,6 @@ on:
         description: Workflow run containing the snow-shot-linux-deb artifact
         required: true
         type: string
-  push:
-    branches:
-      - linux-deb
 
 permissions:
   actions: read
@@ -26,7 +23,7 @@ jobs:
           path: dist
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: ${{ github.event.inputs.run_id || '35613145307' }}
+          run-id: ${{ inputs.run_id }}
 
       - name: Prepare package
         run: |
