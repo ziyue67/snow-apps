@@ -197,10 +197,13 @@ Two Linux-specific build settings are deliberate rather than incidental:
   `-Wnull-dereference` (the last two surface only once LTO is off, and the
   `-Wnull-dereference` hits are inside Qt and libstdc++ headers).
 - **The bundled Qt plugin directory is registered at startup.** The package
-  installs Qt and its platform plugins below `lib/snow-shot`, but Qt on its own
-  only searches `<applicationDirPath>/platforms`. `main` therefore calls
-  `QCoreApplication::addLibraryPath` with that directory before constructing
-  `QApplication`; the executable location comes from `/proc/self/exe` because
-  `applicationDirPath()` needs a live instance. Installing a `qt.conf` or a
-  `platforms/` directory into `/usr/bin` was rejected: every Qt application in
-  that directory would read it.
+  installs the Qt runtime under `lib/snow-shot/lib` and the platform plugins
+  under `lib/snow-shot/plugins/platforms`. The `lib` level matters: the plugins
+  carry a `$ORIGIN/../../lib` runpath, which only resolves to the bundled
+  runtime from that depth — one level higher and the plugins pick up the system
+  Qt instead. Qt itself searches only `<applicationDirPath>/platforms`, so
+  `main` calls `QCoreApplication::addLibraryPath` with the plugin directory
+  before constructing `QApplication`; the executable location comes from
+  `/proc/self/exe` because `applicationDirPath()` needs a live instance.
+  Installing a `qt.conf` or a `platforms/` directory into `/usr/bin` was
+  rejected: every Qt application in that directory would read it.

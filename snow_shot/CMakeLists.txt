@@ -6661,20 +6661,22 @@ if(UNIX AND NOT APPLE)
         "${_snow_shot_qt_lib_dir}/libicu*.so*"
     )
     install(FILES ${_snow_shot_qt_runtime}
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/snow-shot"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/snow-shot/lib"
     )
     install(DIRECTORY "${_snow_shot_qt_prefix}/plugins/platforms"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/snow-shot/plugins"
     )
     # $ORIGIN covers libraries staged next to the binary, ../lib covers the codec
-    # backend and ../lib/snow-shot the bundled Qt runtime.
+    # backend and ../lib/snow-shot/lib the bundled Qt runtime. The Qt platform
+    # plugins carry a $ORIGIN/../../lib runpath, which resolves to the same
+    # directory from <libdir>/snow-shot/plugins/platforms.
     set_target_properties(snow_shot PROPERTIES
-        INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;$ORIGIN/../lib/snow-shot"
+        INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;$ORIGIN/../lib/snow-shot/lib"
         INSTALL_RPATH_USE_LINK_PATH FALSE
     )
     if(TARGET snow_ocr_process)
         set_target_properties(snow_ocr_process PROPERTIES
-            INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;$ORIGIN/../lib/snow-shot"
+            INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;$ORIGIN/../lib/snow-shot/lib"
             INSTALL_RPATH_USE_LINK_PATH FALSE
         )
     endif()
