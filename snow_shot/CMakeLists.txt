@@ -1529,6 +1529,11 @@ if(SNOW_SHOT_BUILD_TESTS)
             ${SNOW_SHOT_GLOBAL_SHORTCUT_SOURCES})
         target_link_libraries(snow-shot-global-shortcut-manager-tests PRIVATE
             snow_shot_global_mouse Qt6::Widgets)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            # These tests compile the shortcut sources, which reach Xlib through
+            # the fullscreen probe.
+            target_link_libraries(snow-shot-global-shortcut-manager-tests PRIVATE X11)
+        endif()
         add_test(NAME snow-shot-global-shortcut-manager-tests
             COMMAND snow-shot-global-shortcut-manager-tests)
 
@@ -1551,6 +1556,14 @@ if(SNOW_SHOT_BUILD_TESTS)
         ${SNOW_SHOT_GLOBAL_SHORTCUT_SOURCES}
         src/presentation/capture/screenshotglobalmousedrag.cpp)
     target_link_libraries(snow-shot-global-mouse-tests PRIVATE snow_shot_global_mouse Qt6::Widgets)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # The shared shortcut sources carry the dispatcher, so this target needs
+        # both Linux backends, plus the fullscreen probe's Xlib dependency.
+        target_sources(snow-shot-global-mouse-tests PRIVATE
+            src/platform/linux/globalshortcutbackend.cpp
+            src/platform/linux/waylandglobalshortcuts.cpp)
+        target_link_libraries(snow-shot-global-mouse-tests PRIVATE Qt6::DBus X11)
+    endif()
     if(APPLE)
         target_link_libraries(snow-shot-global-mouse-tests PRIVATE
             "${SNOW_SHOT_CARBON_FRAMEWORK}"
