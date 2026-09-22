@@ -81,6 +81,8 @@ uiautomation = "^0.21"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 notify-rust = "4.11"
+atspi = { version = "0.30", features = ["zbus"] }
+pollster = "0.4"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
