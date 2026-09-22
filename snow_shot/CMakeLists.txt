@@ -1930,6 +1930,20 @@ if(SNOW_SHOT_BUILD_TESTS)
         target_link_libraries(snow-shot-global-shortcut-backend-tests PRIVATE Qt6::Gui Qt6::DBus X11)
         add_test(NAME snow-shot-global-shortcut-backend-tests
                  COMMAND snow-shot-global-shortcut-backend-tests)
+
+        # The autostart entry is a file under XDG_CONFIG_HOME, so the test can
+        # point that at a temporary directory and needs no desktop session.
+        add_executable(snow-shot-autostart-registration-tests
+            tests/autostart_registration_tests.cpp
+            include/snow_shot/platform/windows/autostartregistration.h
+            src/platform/windows/autostartregistration.cpp
+        )
+        target_include_directories(snow-shot-autostart-registration-tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        )
+        target_link_libraries(snow-shot-autostart-registration-tests PRIVATE Qt6::Gui)
+        add_test(NAME snow-shot-autostart-registration-tests
+                 COMMAND snow-shot-autostart-registration-tests)
     endif()
 
     if(WIN32)

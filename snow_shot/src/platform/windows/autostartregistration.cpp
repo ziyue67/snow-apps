@@ -6,6 +6,10 @@
 #include <limits>
 #include <string>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+
 #if defined(Q_OS_WIN) || defined(_WIN32)
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -90,11 +94,73 @@ QByteArray registryStringData(const QString& value) {
     const qsizetype byteCount = static_cast<qsizetype>((nativeValue.size() + 1) * sizeof(wchar_t));
     return QByteArray(reinterpret_cast<const char*>(nativeValue.c_str()), byteCount);
 }
+#elif defined(Q_OS_LINUX)
+// XDG autostart: the session launches whatever desktop entry sits in
+// $XDG_CONFIG_HOME/autostart, which defaults to ~/.config/autostart.
+QString configHomeDirectory() {
+    const QByteArray fromEnvironment = qgetenv("XDG_CONFIG_HOME");
+    if (!fromEnvironment.isEmpty()) {
+        return QFile::decodeName(fromEnvironment);
+    }
+    return QDir::homePath() + QStringLiteral("/.config");
+}
+
+QString autostartFilePath() {
+    return configHomeDirectory() + QStringLiteral("/autostart/snow-shot.desktop");
+}
+
+QByteArray desktopEntryContents() {
+    return QStringLiteral("[Desktop Entry]\n"
+                          "Type=Application\n"
+                          "Name=Snow Shot\n"
+                          "Exec=%1\n"
+                          "X-GNOME-Autostart-enabled=true\n")
+        .arg(AutoStartRegistration::expectedCommand())
+        .toUtf8();
+}
+
+// Only the Exec line has to agree with the command the application expects.
+QString execLineOf(const QByteArray& contents) {
+    const QStringList lines = QString::fromUtf8(contents).split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        if (line.startsWith(QStringLiteral("Exec="))) {
+            return line.mid(5);
+        }
+    }
+    return {};
+}
+
+bool writeAutostartFile(const QByteArray& contents, QString* error) {
+    const QString path = autostartFilePath();
+    if (!QDir().mkpath(QFileInfo(path).absolutePath())) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Could not create the auto-start directory");
+        }
+        return false;
+    }
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Could not write the auto-start entry: %1").arg(file.errorString());
+        }
+        return false;
+    }
+    if (file.write(contents) < 0) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Could not write the auto-start entry: %1").arg(file.errorString());
+        }
+        return false;
+    }
+    return true;
+}
 #endif
 } // namespace
 
 bool AutoStartRegistration::isSupported() {
 #if defined(Q_OS_WIN) || defined(_WIN32)
+    return true;
+#elif defined(Q_OS_LINUX)
+    // The session launches the desktop entry, so the file is all it takes.
     return true;
 #else
     return false;
@@ -150,6 +216,19 @@ AutoStartRegistrationSnapshot AutoStartRegistration::snapshot() {
     result.valid = true;
     result.exists = true;
     result.nativeType = type;
+#elif defined(Q_OS_LINUX)
+    QFile file(autostartFilePath());
+    if (!file.exists()) {
+        result.valid = true;
+        return result;
+    }
+    if (!file.open(QIODevice::ReadOnly)) {
+        result.error = QStringLiteral("Could not read the auto-start entry: %1").arg(file.errorString());
+        return result;
+    }
+    result.nativeData = file.readAll();
+    result.valid = true;
+    result.exists = true;
 #else
     result.error = QStringLiteral("Auto-start registration is only supported on Windows");
 #endif
@@ -172,6 +251,12 @@ bool AutoStartRegistration::matchesExpectedCommand() {
         ++length;
     }
     return QString::fromWCharArray(value, length) == expectedCommand();
+#elif defined(Q_OS_LINUX)
+    const AutoStartRegistrationSnapshot current = snapshot();
+    if (!current.valid || !current.exists) {
+        return false;
+    }
+    return execLineOf(current.nativeData) == expectedCommand();
 #else
     return false;
 #endif
@@ -183,6 +268,21 @@ bool AutoStartRegistration::setEnabled(bool enabled, QString* error) {
         return deleteRegistration(error);
     }
     return writeRegistration(REG_SZ, registryStringData(expectedCommand()), error);
+#elif defined(Q_OS_LINUX)
+    if (enabled) {
+        return writeAutostartFile(desktopEntryContents(), error);
+    }
+    const QString path = autostartFilePath();
+    if (!QFile::exists(path)) {
+        return true;
+    }
+    if (!QFile::remove(path)) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Could not remove the auto-start entry");
+        }
+        return false;
+    }
+    return true;
 #else
     if (error != nullptr) {
         *error = QStringLiteral("Auto-start registration is only supported on Windows");
@@ -202,6 +302,12 @@ bool AutoStartRegistration::restore(const AutoStartRegistrationSnapshot& previou
 #if defined(Q_OS_WIN) || defined(_WIN32)
     return previous.exists ? writeRegistration(previous.nativeType, previous.nativeData, error)
                            : deleteRegistration(error);
+#elif defined(Q_OS_LINUX)
+    if (previous.exists) {
+        return writeAutostartFile(previous.nativeData, error);
+    }
+    QString ignored;
+    return setEnabled(false, error != nullptr ? error : &ignored);
 #else
     if (error != nullptr) {
         *error = QStringLiteral("Auto-start registration is only supported on Windows");
