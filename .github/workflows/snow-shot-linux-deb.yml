@@ -8,6 +8,11 @@ name: Build Linux Debian (Qt)
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_tag:
+        description: Tag to publish a release under; leave empty to only build
+        required: false
+        type: string
   push:
     branches:
       - main
@@ -104,3 +109,16 @@ jobs:
           name: snow-shot-linux-deb
           path: build/snow-shot-linux-x64-release/*.deb
           if-no-files-found: error
+
+      # Publishing is deliberately explicit: a branch build only uploads an
+      # artifact, and a release happens when someone names the tag to use, so
+      # ordinary pushes cannot create releases by themselves.
+      - name: Publish the release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.publish_tag }}
+          name: Snow Shot Linux ${{ inputs.publish_tag }}
+          prerelease: true
+          generate_release_notes: true
+          files: build/snow-shot-linux-x64-release/*.deb

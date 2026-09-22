@@ -14,15 +14,18 @@ from the distribution.
 ```bash
 sudo apt-get install -y --no-install-recommends \
     build-essential ninja-build cmake pkg-config clang-format clang libclang-dev \
+    file libssl-dev \
     libgl1-mesa-dev libvulkan-dev \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
     libopencv-dev libonnxruntime-dev libminizip-ng-dev \
     libpng-dev libjpeg-turbo8-dev libturbojpeg0-dev libwebp-dev libheif-dev \
     libjxl-dev libgif-dev libopenexr-dev \
+    libx11-dev libxi-dev libdbus-1-dev libxkbcommon-dev \
     libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
     libxcb-render-util0 libxcb-shape0 libxcb-sync1 libxcb-xfixes0 \
     libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libfontconfig1 libfreetype6 \
-    libglx-mesa0 libopengl0
+    libglx-mesa0 libopengl0 \
+    libwayland-client0 libwayland-cursor0 libwayland-server0
 ```
 
 The Rust toolchain is pinned by `rust-toolchain.toml` (1.97.1). Install it with
@@ -38,7 +41,7 @@ python3 -m venv .tools/aqt-venv
 .tools/aqt-venv/bin/pip install --upgrade pip aqtinstall
 .tools/aqt-venv/bin/aqt install-qt linux desktop 6.11.1 linux_gcc_64 \
     -O .tools/Qt -b https://download.qt.io \
-    --archives qtbase qtsvg qttools qttranslations icu qtwayland
+    --archives qtbase qtsvg qttools qttranslations icu qtwayland qtdeclarative
 ```
 
 Set `Qt6_DIR` to a different kit if you prefer one, for example a distribution
