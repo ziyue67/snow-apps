@@ -1155,7 +1155,7 @@ void DiagnosticsService::requestMaintenance() {
     m_impl->maintenancePending = true;
     m_impl->tasks.push_back({{}, {}, QtInfoMsg, [this] {
                                  {
-                                     std::lock_guard<std::mutex> lock(m_impl->mutex);
+                                     std::lock_guard<std::mutex> pendingLock(m_impl->mutex);
                                      m_impl->maintenancePending = false;
                                  }
                                  m_impl->maintenance();

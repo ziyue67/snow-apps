@@ -27,6 +27,15 @@ function(snow_workspace_configure_paths)
             else()
                 set(_snow_default_triplet "arm64-osx-snow-shot")
             endif()
+        elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            # Linux resolves its native dependencies from the system package
+            # manager. The triplet only names the vcpkg-compatible layout so
+            # that the remaining cache variables stay well formed.
+            if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+                set(_snow_default_triplet "arm64-linux")
+            else()
+                set(_snow_default_triplet "x64-linux")
+            endif()
         else()
             set(_snow_default_triplet "x64-windows")
         endif()
@@ -39,8 +48,18 @@ function(snow_workspace_configure_paths)
     endif()
     set(SNOW_VCPKG_INSTALLED_DIR "${_vcpkg_installed_default}" CACHE PATH
         "vcpkg installed tree used by the active build preset.")
-    set(SNOW_FFMPEG_ROOT "${SNOW_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}" CACHE PATH
-        "vcpkg installation prefix containing FFmpeg.")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # Distro FFmpeg is discovered through pkg-config from the default search
+        # path, so the prefix defaults to the system root instead of a vcpkg
+        # installation tree.
+        set(_snow_ffmpeg_root_default "/usr")
+    else()
+        set(_snow_ffmpeg_root_default
+            "${SNOW_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+    endif()
+    set(SNOW_FFMPEG_ROOT "${_snow_ffmpeg_root_default}" CACHE PATH
+        "Installation prefix containing FFmpeg.")
+    unset(_snow_ffmpeg_root_default)
 
     foreach(_required_dir IN ITEMS
         SNOW_ANT_DESIGN_SOURCE_DIR

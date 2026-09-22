@@ -3,7 +3,7 @@
 #if defined(SNOW_IMAGE_HAS_PNG)
 #include <zlib.h>
 
-#if !defined(ZLIBNG_VERSION)
+#if !defined(ZLIBNG_VERSION) && !defined(SNOW_IMAGE_ALLOW_STOCK_ZLIB)
 #error "snow_image PNG support requires the repository zlib-ng compatibility overlay"
 #endif
 #endif

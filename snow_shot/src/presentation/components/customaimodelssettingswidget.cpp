@@ -403,22 +403,22 @@ void CustomAiModelsSettingsWidget::openEditor(const QString& id) {
                     }
                     *pending = nullptr;
                     const auto document = QJsonDocument::fromJson(reply->readAll());
-                    const auto data = document.object().value(QStringLiteral("data"));
-                    const bool failed = reply->error() != QNetworkReply::NoError || !data.isArray();
+                    const auto dataValue = document.object().value(QStringLiteral("data"));
+                    const bool failed = reply->error() != QNetworkReply::NoError || !dataValue.isArray();
                     *fetched = !failed;
                     QVector<AdComboBox::Option> options;
                     QSet<QString> seen;
                     if (!failed) {
-                        for (const auto& entry : data.toArray()) {
-                            const auto id =
+                        for (const auto& entry : dataValue.toArray()) {
+                            const auto entryId =
                                 entry.toObject().value(QStringLiteral("id")).toString().trimmed();
-                            if (id.isEmpty() || seen.contains(id)) {
+                            if (entryId.isEmpty() || seen.contains(entryId)) {
                                 continue;
                             }
-                            seen.insert(id);
+                            seen.insert(entryId);
                             AdComboBox::Option option;
-                            option.value = id;
-                            option.label = id;
+                            option.value = entryId;
+                            option.label = entryId;
                             options.append(option);
                         }
                     }

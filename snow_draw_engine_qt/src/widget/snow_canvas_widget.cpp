@@ -301,13 +301,13 @@ bool hitsSelectedText(SnowRuntime runtime, SnowViewport viewport, const QPointF&
 } // namespace
 
 struct SnowCanvasWidget::Impl : public snow_canvas_runtime::Client {
-    explicit Impl(SnowCanvasWidget& widget)
-        : widget(widget), cursorController(widget), inputHandler(widget, cursorController),
-          textInteraction(widget, cursorController) {}
+    explicit Impl(SnowCanvasWidget& owner)
+        : widget(owner), cursorController(owner), inputHandler(owner, cursorController),
+          textInteraction(owner, cursorController) {}
 
-    Impl(SnowCanvasWidget& widget, SnowCanvasRuntime& runtime)
-        : widget(widget), runtimeBinding(runtime), cursorController(widget),
-          inputHandler(widget, cursorController), textInteraction(widget, cursorController) {}
+    Impl(SnowCanvasWidget& owner, SnowCanvasRuntime& runtime)
+        : widget(owner), runtimeBinding(runtime), cursorController(owner),
+          inputHandler(owner, cursorController), textInteraction(owner, cursorController) {}
 
     void initializeWidget();
     void initializeViewport();

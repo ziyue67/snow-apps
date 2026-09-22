@@ -21,11 +21,10 @@
 #include "snow_shot/presentation/styles/themecolorscheme.h"
 #include "snow_shot/presentation/screenrecordingfolder.h"
 
-#if defined(Q_OS_WIN) || defined(_WIN32) || defined(Q_OS_MACOS)
 #include "snow_shot/platform/windowcaptureexclusion.h"
+
 #if defined(Q_OS_WIN) || defined(_WIN32)
 #include "snow_shot/platform/windows/windowchrome.h"
-#endif
 #endif
 
 #include "snow_capture.h"

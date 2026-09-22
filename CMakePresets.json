@@ -275,6 +275,76 @@
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE": "OFF",
         "SNOW_RUST_RELEASE_PROFILE": "release-fast"
       }
+    },
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "displayName": "Linux base",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "${sourceDir}/.tools/libjpeg-turbo",
+        "Qt6_DIR": "${sourceDir}/.tools/Qt/6.11.1/gcc_64/lib/cmake/Qt6",
+        "SNOW_APPS_BUILD_ANT_DESIGN_QT": "ON",
+        "SNOW_APPS_BUILD_SNOW_IMAGE": "ON",
+        "SNOW_APPS_BUILD_DRAW_ENGINE": "ON",
+        "SNOW_APPS_BUILD_IMAGE_VIEWER": "OFF",
+        "SNOW_APPS_BUILD_SNOW_SHOT": "ON",
+        "SNOW_APPS_STRICT_COMPILE": "ON",
+        "SNOW_APPS_ENABLE_CLANG_TIDY": "OFF",
+        "SNOW_APPS_RELEASE_STATIC": "OFF",
+        "SNOW_APPS_QT_STATIC": "OFF",
+        "SNOW_APPS_ENABLE_RELEASE_OPTIMIZATION": "ON",
+        "SNOW_IMAGE_PROFILE": "redistributable",
+        "SNOW_IMAGE_DEFAULT_LINKAGE": "static",
+        "SNOW_FFMPEG_ROOT": "/usr",
+        "SNOW_LIBCLANG_BIN_DIR": "/usr/lib/llvm-21/lib"
+      }
+    },
+    {
+      "name": "snow-shot-linux-x64-debug",
+      "displayName": "Snow Shot Linux x64 Debug",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SNOW_APPS_BUILD_TESTS": "ON",
+        "SNOW_APPS_BUILD_BENCHMARKS": "OFF",
+        "SNOW_APPS_PACKAGE_SNOW_SHOT": "OFF",
+        "SNOW_APPS_API_BASE_URL": "http://localhost:8080"
+      }
+    },
+    {
+      "name": "snow-shot-linux-x64-release",
+      "displayName": "Snow Shot Linux x64 Release",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SNOW_APPS_BUILD_TESTS": "OFF",
+        "SNOW_APPS_BUILD_BENCHMARKS": "OFF",
+        "SNOW_APPS_PACKAGE_SNOW_SHOT": "ON",
+        "SNOW_APPS_API_BASE_URL": "https://snowshot.top"
+      }
+    },
+    {
+      "name": "snow-shot-linux-x64-fast",
+      "displayName": "Snow Shot Linux x64 Fast",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SNOW_APPS_BUILD_TESTS": "OFF",
+        "SNOW_APPS_BUILD_BENCHMARKS": "OFF",
+        "SNOW_APPS_PACKAGE_SNOW_SHOT": "OFF",
+        "SNOW_APPS_API_BASE_URL": "https://snowshot.top",
+        "SNOW_APPS_ENABLE_RELEASE_OPTIMIZATION": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -362,6 +432,30 @@
     {
       "name": "build-snow-shot-macos-x64-fast",
       "configurePreset": "snow-shot-macos-x64-fast",
+      "targets": [
+        "snow_shot"
+      ]
+    },
+    {
+      "name": "build-snow-shot-linux-x64-debug",
+      "configurePreset": "snow-shot-linux-x64-debug",
+      "configuration": "Debug",
+      "targets": [
+        "snow_shot"
+      ]
+    },
+    {
+      "name": "build-snow-shot-linux-x64-release",
+      "configurePreset": "snow-shot-linux-x64-release",
+      "configuration": "Release",
+      "targets": [
+        "snow_shot"
+      ]
+    },
+    {
+      "name": "build-snow-shot-linux-x64-fast",
+      "configurePreset": "snow-shot-linux-x64-fast",
+      "configuration": "Release",
       "targets": [
         "snow_shot"
       ]
@@ -454,6 +548,30 @@
           "label": "interactive|e2e|benchmark|windows"
         }
       }
+    },
+    {
+      "name": "test-snow-shot-linux-x64-debug",
+      "configurePreset": "snow-shot-linux-x64-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "exclude": {
+          "label": "interactive|e2e|benchmark|windows"
+        }
+      }
+    },
+    {
+      "name": "test-snow-shot-linux-x64-release",
+      "configurePreset": "snow-shot-linux-x64-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "exclude": {
+          "label": "interactive|e2e|benchmark|windows"
+        }
+      }
     }
   ],
   "packagePresets": [
@@ -476,6 +594,13 @@
       "configurePreset": "snow-shot-macos-x64-release",
       "generators": [
         "DragNDrop"
+      ]
+    },
+    {
+      "name": "package-snow-shot-linux-x64-release",
+      "configurePreset": "snow-shot-linux-x64-release",
+      "generators": [
+        "DEB"
       ]
     }
   ]

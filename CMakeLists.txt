@@ -20,6 +20,11 @@ set(SNOW_SHOT_DESCRIPTION
 set(SNOW_SHOT_HOMEPAGE_URL "https://snowshot.top")
 set(SNOW_SHOT_SUPPORT_EMAIL "chao@mgchao.top")
 set(SNOW_SHOT_COPYRIGHT "Copyright (C) 2025-2026 mg-chao")
+# Freedesktop desktop-entry identifier. Wayland compositors match a running
+# window against the desktop file of the same name, so it doubles as the Linux
+# application id and drives the installed icon names.
+set(SNOW_SHOT_LINUX_DESKTOP_ID "com.snowshot.snow_shot" CACHE STRING
+    "Freedesktop desktop-entry identifier used by the Linux package.")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -397,11 +402,15 @@ if(SNOW_APPS_PACKAGE_SNOW_SHOT AND NOT APPLE)
     set(CPACK_PACKAGE_DESCRIPTION "${SNOW_SHOT_DESCRIPTION}")
     set(CPACK_PACKAGE_HOMEPAGE_URL "${SNOW_SHOT_HOMEPAGE_URL}")
     set(CPACK_PACKAGE_VERSION "${SNOW_SHOT_VERSION}")
+    set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}")
+    set(CPACK_PACKAGE_CHECKSUM "SHA256")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        include(cmake/SnowShotLinuxPackage.cmake)
+        include(CPack)
+    else()
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "SnowShot")
     set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "SnowShot")
     set(CPACK_PACKAGE_FILE_NAME "snow-shot-${SNOW_SHOT_VERSION}-windows-x64")
-    set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}")
-    set(CPACK_PACKAGE_CHECKSUM "SHA256")
     # LZMA gives the smallest installer while solid compression keeps repeated
     # Qt/runtime data from being stored more than once.
     set(CPACK_NSIS_COMPRESSOR "lzma")
@@ -446,4 +455,5 @@ if(SNOW_APPS_PACKAGE_SNOW_SHOT AND NOT APPLE)
     set(CPACK_VERBATIM_VARIABLES ON)
     include(cmake/SnowShotInstaller.cmake)
     include(CPack)
+    endif()
 endif()

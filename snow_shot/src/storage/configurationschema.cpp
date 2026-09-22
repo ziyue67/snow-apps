@@ -1020,7 +1020,9 @@ QJsonArray shortcutDefaults(const QJsonValue& value) {
         snow_shot::shortcuts::shortcutBindingsFromJson(value, true));
 }
 
-QJsonArray macGlobalShortcutDefault(const QString& portableText, quint32 virtualKey) {
+// Only the macOS shortcut defaults consume this helper.
+[[maybe_unused]] QJsonArray macGlobalShortcutDefault(const QString& portableText,
+                                                     quint32 virtualKey) {
     snow_shot::shortcuts::ShortcutBinding binding{portableText};
     binding.physicalKeys.insert(snow_shot::shortcuts::ShortcutPlatform::MacOS, virtualKey);
     return snow_shot::shortcuts::shortcutBindingsToJson({binding});

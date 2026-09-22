@@ -43,8 +43,9 @@ struct SnowCanvasRuntime::Impl {
     snow_canvas_runtime::RuntimeSession session;
 };
 
-SnowCanvasRuntime::Impl::Impl(SnowCanvasRuntime& owner, const SnowCanvasRuntimeConfig& config)
-    : owner(owner), session(config) {}
+SnowCanvasRuntime::Impl::Impl(SnowCanvasRuntime& owningRuntime,
+                              const SnowCanvasRuntimeConfig& config)
+    : owner(owningRuntime), session(config) {}
 
 SnowCanvasRuntime::Impl::~Impl() {
     session.destroyForOwnerDestruction(

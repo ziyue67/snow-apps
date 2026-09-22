@@ -3427,9 +3427,9 @@ void AdImage::requestMainImageIfNeeded() {
 
     if (!fallbackSource_.isEmpty() &&
         normalizeSourceKey(fallbackSource_) != normalizeSourceKey(source_)) {
-      const AdImageLoadOptions options = mainLoadOptions();
+      const AdImageLoadOptions fallbackOptions = mainLoadOptions();
       AdImageReply* fallbackReply =
-          resolvedImageLoader(imageLoader_)->load(fallbackSource_, options, this);
+          resolvedImageLoader(imageLoader_)->load(fallbackSource_, fallbackOptions, this);
       fallbackReply_ = fallbackReply;
       const QPointer<AdImageReply> guardedFallbackReply(fallbackReply);
       QObject::connect(

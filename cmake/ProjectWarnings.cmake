@@ -33,6 +33,29 @@ function(snow_apply_strict_warnings target)
             -Wnon-virtual-dtor -Wnull-dereference -Wold-style-cast
             -Woverloaded-virtual -Wshadow -Wsign-conversion -Wundef
         )
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            # GCC extends -Wmissing-declarations to C++ functions at namespace
+            # scope, so every internal helper defined in a .cpp needs a redundant
+            # forward declaration. Clang restricts the same flag to C, which is
+            # why the shared libraries build cleanly there and on MSVC. Keep the
+            # check enabled for clang and drop only GCC's C++ interpretation.
+            target_compile_options("${target}" PRIVATE
+                -Wno-missing-declarations
+                # The remaining diagnostics are GCC-only pedantry that neither
+                # Clang nor MSVC emits, so the codebase was never written to
+                # satisfy them: GCC's -Wshadow also covers constructor
+                # parameters shadowing members and lambda parameters shadowing
+                # enclosing parameters, and -Wuseless-cast,
+                # -Wduplicated-branches, -Wchanges-meaning and
+                # -Wsubobject-linkage have no counterpart on the other
+                # compilers. Align GCC with the compilers this project targets
+                # instead of rewriting otherwise valid code.
+                -Wno-shadow
+                -Wno-useless-cast
+                -Wno-duplicated-branches
+                -Wno-changes-meaning
+                -Wno-subobject-linkage)
+        endif()
     else()
         message(WARNING "Strict warning flags are not defined for ${CMAKE_CXX_COMPILER_ID}.")
     endif()
@@ -97,6 +120,21 @@ function(snow_enable_strict_warnings)
             -Wnon-virtual-dtor -Wnull-dereference -Wold-style-cast
             -Woverloaded-virtual -Wshadow -Wsign-conversion -Wundef
         )
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            # GCC extends -Wmissing-declarations to C++ functions at namespace
+            # scope, so every internal helper defined in a .cpp needs a redundant
+            # forward declaration. Clang restricts the same flag to C, which is
+            # why the shared libraries build cleanly there and on MSVC.
+            add_compile_options(
+                -Wno-missing-declarations
+                # See snow_apply_strict_warnings: GCC-only diagnostics with no
+                # Clang or MSVC counterpart.
+                -Wno-shadow
+                -Wno-useless-cast
+                -Wno-duplicated-branches
+                -Wno-changes-meaning
+                -Wno-subobject-linkage)
+        endif()
     else()
         message(WARNING "Strict warning flags are not defined for ${CMAKE_CXX_COMPILER_ID}.")
     endif()

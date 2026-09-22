@@ -2729,13 +2729,13 @@ void renderSceneItemsImpl(const SceneRenderRequest& request) {
                     } else {
                         const bool hasPenFilter =
                             std::any_of(group.indices.begin(), group.indices.end(),
-                                        [sceneItems](std::uint32_t index) {
-                                            return sceneItems[index].is_free_draw != 0;
+                                        [sceneItems](std::uint32_t itemIndex) {
+                                            return sceneItems[itemIndex].is_free_draw != 0;
                                         });
                         const bool onlyPenFilters =
                             std::all_of(group.indices.begin(), group.indices.end(),
-                                        [sceneItems](std::uint32_t index) {
-                                            return sceneItems[index].is_free_draw != 0;
+                                        [sceneItems](std::uint32_t itemIndex) {
+                                            return sceneItems[itemIndex].is_free_draw != 0;
                                         });
                         if (onlyPenFilters && group.type != 1) {
                             std::size_t coveredPixels = 0;

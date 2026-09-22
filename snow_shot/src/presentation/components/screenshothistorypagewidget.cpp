@@ -463,26 +463,26 @@ class HistoryThumbnailReply final : public adqt::widgets::AdImageReply {
         connect(sourceReply_, &adqt::widgets::AdImageReply::finished, this, [this]() {
             if (aborted_)
                 return;
-            auto* source = sourceReply_.data();
-            if (source == nullptr) {
+            auto* sourceHandle = sourceReply_.data();
+            if (sourceHandle == nullptr) {
                 fail(QStringLiteral("Thumbnail source reply was destroyed"));
                 return;
             }
             sourceReply_.clear();
-            source->deleteLater();
-            if (source->isSuccessful()) {
-                QImage image = source->image();
+            sourceHandle->deleteLater();
+            if (sourceHandle->isSuccessful()) {
+                QImage image = sourceHandle->image();
                 const QImage replyImage = image;
                 if (onSuccess_) {
                     onSuccess_(std::move(image));
                 }
-                succeed(replyImage, source->naturalSize());
+                succeed(replyImage, sourceHandle->naturalSize());
             } else {
-                auto onFailure = std::move(onFailure_);
-                if (onFailure)
-                    onFailure(source->errorString());
+                auto failureHandler = std::move(onFailure_);
+                if (failureHandler)
+                    failureHandler(sourceHandle->errorString());
                 else
-                    fail(source->errorString());
+                    fail(sourceHandle->errorString());
             }
         });
     }
@@ -624,13 +624,13 @@ class HistoryThumbnailLoader final : public adqt::widgets::AdImageLoader {
         const QString directory = QFileInfo(path).absolutePath();
         auto capacity = m_capacity;
         historyTaskExecutor().persist(
-            path, std::move(image), [capacity, directory, path](QImage image) mutable {
+            path, std::move(image), [capacity, directory, path](QImage storedImage) mutable {
                 if (!QDir().mkpath(directory)) {
                     return;
                 }
                 QSaveFile file(path);
-                const QByteArray png = snow_shot::image_codec::encodePng(image);
-                image = QImage();
+                const QByteArray png = snow_shot::image_codec::encodePng(storedImage);
+                storedImage = QImage();
                 if (!file.open(QIODevice::WriteOnly) || png.isEmpty() ||
                     file.write(png) != png.size() || !file.commit()) {
                     return;

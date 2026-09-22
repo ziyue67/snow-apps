@@ -67,10 +67,16 @@ set_source_files_properties(
             SKIP_UNITY_BUILD_INCLUSION ON
     )
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i.86)$")
+    # The AVX2 translation units carry per-source ISA flags, so they must not be
+    # merged into a unity blob or reuse the target precompiled header: GCC
+    # rejects a PCH that was built with different ISA settings.
     set_source_files_properties(
         src/rendering/snow_canvas_filter_avx2.cpp
         src/rendering/snow_canvas_pen_mask_avx2.cpp
-        PROPERTIES COMPILE_OPTIONS "-mavx2"
+        PROPERTIES
+            COMPILE_OPTIONS "-mavx2"
+            SKIP_UNITY_BUILD_INCLUSION ON
+            SKIP_PRECOMPILE_HEADERS ON
     )
 endif()
 

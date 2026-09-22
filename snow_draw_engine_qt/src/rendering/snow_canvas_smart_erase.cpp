@@ -40,7 +40,11 @@ QThreadPool& workerPool() {
     (void)configured;
     return pool;
 }
+} // namespace
 
+// Kept at namespace scope rather than in the anonymous namespace above:
+// Coordinator::Impl has external linkage, and a class with external linkage may
+// not hold a member whose type has internal linkage.
 struct Completed {
     quint64 id = 0;
     QByteArray key;
@@ -51,7 +55,6 @@ struct Mailbox {
     std::mutex mutex;
     std::vector<Completed> completed;
 };
-} // namespace
 
 QByteArray geometryKey(const SnowCanvasSceneItem& item) {
     QByteArray bytes;

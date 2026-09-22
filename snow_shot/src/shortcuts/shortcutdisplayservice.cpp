@@ -14,7 +14,8 @@
 namespace snow_shot::shortcuts {
 namespace {
 
-QString fallbackKeyText(const ShortcutBinding& binding) {
+// Only the macOS legend path consumes this helper.
+[[maybe_unused]] QString fallbackKeyText(const ShortcutBinding& binding) {
     const QKeySequence sequence =
         QKeySequence::fromString(binding.portableText, QKeySequence::PortableText);
     if (sequence.count() != 1) {

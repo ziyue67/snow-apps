@@ -67,6 +67,8 @@ impl MonitorId {
         }
     }
 
+    /// Native display handle; only the Windows and macOS backends need it.
+    #[cfg(any(windows, target_os = "macos"))]
     pub(crate) fn raw_handle(&self) -> isize {
         self.handle
     }

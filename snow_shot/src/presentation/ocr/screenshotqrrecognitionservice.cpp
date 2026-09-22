@@ -101,9 +101,20 @@ const BarcodeDecoders& threadDecoders(const QString& modelsDirectoryPath) {
         readModelFile(modelsDirectory, QStringLiteral("sr.caffemodel"), superResolutionCaffeModel);
     if (modelsReadable) {
         try {
+#if defined(SNOW_SHOT_QR_HAS_IN_MEMORY_MODELS)
             created.qr = cv::makePtr<cv::wechat_qrcode::WeChatQRCode>(
                 std::move(detectorPrototxt), std::move(detectorCaffeModel),
                 std::move(superResolutionPrototxt), std::move(superResolutionCaffeModel));
+#else
+            // Stock OpenCV only accepts model paths. The buffers above are still
+            // read through QFile so the readability check and its diagnostics stay
+            // identical; only the constructor input differs.
+            created.qr = cv::makePtr<cv::wechat_qrcode::WeChatQRCode>(
+                modelsDirectory.filePath(QStringLiteral("detect.prototxt")).toStdString(),
+                modelsDirectory.filePath(QStringLiteral("detect.caffemodel")).toStdString(),
+                modelsDirectory.filePath(QStringLiteral("sr.prototxt")).toStdString(),
+                modelsDirectory.filePath(QStringLiteral("sr.caffemodel")).toStdString());
+#endif
         } catch (const std::exception& exception) {
             qWarning() << "Failed to load the WeChat QR models:" << exception.what();
             created.loadError = recognitionModelsMissingMessage();

@@ -139,19 +139,33 @@ function(snow_add_rust_static_libraries batch_name)
     endforeach()
 
     set(_libclang_dir "")
-    if(EXISTS "${SNOW_LIBCLANG_BIN_DIR}/libclang.dll")
-        set(_libclang_dir "${SNOW_LIBCLANG_BIN_DIR}")
-    else()
-        find_file(_libclang_dll
-            NAMES libclang.dll clang.dll
+    # bindgen needs a loadable libclang. Windows ships it as a DLL next to the
+    # LLVM tools; Linux distributions install libclang.so into the multiarch
+    # library directory while the headers live under /usr/lib/llvm-*.
+    set(_snow_libclang_file_names libclang.dll clang.dll)
+    if(UNIX AND NOT APPLE)
+        set(_snow_libclang_file_names libclang.so libclang.so.1)
+    endif()
+    foreach(_snow_libclang_candidate IN LISTS _snow_libclang_file_names)
+        if(EXISTS "${SNOW_LIBCLANG_BIN_DIR}/${_snow_libclang_candidate}")
+            set(_libclang_dir "${SNOW_LIBCLANG_BIN_DIR}")
+            break()
+        endif()
+    endforeach()
+    unset(_snow_libclang_candidate)
+    unset(_snow_libclang_file_names)
+    if(NOT _libclang_dir)
+        find_file(_libclang_library
+            NAMES libclang.dll clang.dll libclang.so libclang.so.1
             HINTS
                 "$ENV{LIBCLANG_PATH}"
                 "$ENV{LLVMInstallDir}/bin"
                 "C:/Program Files/LLVM/bin"
         )
-        if(_libclang_dll)
-            get_filename_component(_libclang_dir "${_libclang_dll}" DIRECTORY)
+        if(_libclang_library)
+            get_filename_component(_libclang_dir "${_libclang_library}" DIRECTORY)
         endif()
+        unset(_libclang_library CACHE)
     endif()
 
     set(_snow_rust_static_crt FALSE)
@@ -169,7 +183,6 @@ function(snow_add_rust_static_libraries batch_name)
         "VCPKG_ROOT=${SNOW_VCPKG_ROOT}"
         "VCPKGRS_TRIPLET=${VCPKG_TARGET_TRIPLET}"
         "VCPKGRS_DYNAMIC=${_vcpkg_dynamic}"
-        "FFMPEG_DIR=${SNOW_FFMPEG_ROOT}"
         "CARGO_TARGET_DIR=${SNOW_RUST_CARGO_TARGET_DIR}"
     )
     if(APPLE)
@@ -179,6 +192,14 @@ function(snow_add_rust_static_libraries batch_name)
         endif()
         list(APPEND _cargo_environment
             "MACOSX_DEPLOYMENT_TARGET=${_snow_rust_deployment_target}")
+    endif()
+    # ffmpeg-sys-next prefers FFMPEG_DIR over pkg-config, and it expects the
+    # vcpkg layout where the headers sit directly under <prefix>/include. Linux
+    # distributions install the headers into the multiarch include directory
+    # instead, so only advertise the prefix when that layout is really there and
+    # otherwise let pkg-config report the correct include and library paths.
+    if(EXISTS "${SNOW_FFMPEG_ROOT}/include/libavcodec/avcodec.h")
+        list(APPEND _cargo_environment "FFMPEG_DIR=${SNOW_FFMPEG_ROOT}")
     endif()
     if(_libclang_dir)
         list(APPEND _cargo_environment "LIBCLANG_PATH=${_libclang_dir}")

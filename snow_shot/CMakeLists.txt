@@ -169,6 +169,45 @@ if(WIN32)
     if(EXISTS "${SNOW_SHOT_LIBCLANG_DIR}/libclang.dll")
         set(ENV{LIBCLANG_PATH} "${SNOW_SHOT_LIBCLANG_DIR}")
     endif()
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # bindgen needs a loadable libclang. Linux distributions ship the shared
+    # object either under the versioned LLVM prefix or in the multiarch library
+    # directory, so probe the usual locations when the caller did not point at
+    # one explicitly.
+    set(SNOW_SHOT_LIBCLANG_DIR
+        "${SNOW_LIBCLANG_BIN_DIR}"
+        CACHE PATH
+        "Directory containing libclang.so for Rust bindgen."
+    )
+    if(NOT EXISTS "${SNOW_SHOT_LIBCLANG_DIR}/libclang.so" AND
+       NOT EXISTS "${SNOW_SHOT_LIBCLANG_DIR}/libclang.so.1")
+        file(GLOB _snow_shot_libclang_prefixes "/usr/lib/llvm-*")
+        list(SORT _snow_shot_libclang_prefixes COMPARE NATURAL ORDER DESCENDING)
+        set(_snow_shot_libclang_candidates)
+        foreach(_snow_shot_libclang_prefix IN LISTS _snow_shot_libclang_prefixes)
+            list(APPEND _snow_shot_libclang_candidates "${_snow_shot_libclang_prefix}/lib")
+        endforeach()
+        unset(_snow_shot_libclang_prefix)
+        unset(_snow_shot_libclang_prefixes)
+        list(APPEND _snow_shot_libclang_candidates
+            "/usr/lib/x86_64-linux-gnu"
+            "/usr/lib/aarch64-linux-gnu"
+            "/usr/lib")
+        foreach(_snow_shot_libclang_candidate IN LISTS _snow_shot_libclang_candidates)
+            if(EXISTS "${_snow_shot_libclang_candidate}/libclang.so" OR
+               EXISTS "${_snow_shot_libclang_candidate}/libclang.so.1")
+                set(SNOW_SHOT_LIBCLANG_DIR "${_snow_shot_libclang_candidate}" CACHE PATH
+                    "Directory containing libclang.so for Rust bindgen." FORCE)
+                break()
+            endif()
+        endforeach()
+        unset(_snow_shot_libclang_candidate)
+        unset(_snow_shot_libclang_candidates)
+    endif()
+    if(EXISTS "${SNOW_SHOT_LIBCLANG_DIR}/libclang.so" OR
+       EXISTS "${SNOW_SHOT_LIBCLANG_DIR}/libclang.so.1")
+        set(ENV{LIBCLANG_PATH} "${SNOW_SHOT_LIBCLANG_DIR}")
+    endif()
 endif()
 
 if(NOT TARGET snow_capture_c)
@@ -176,23 +215,31 @@ if(NOT TARGET snow_capture_c)
     if(SNOW_SHOT_SCROLLING_PERF_DETAIL)
         list(APPEND _snow_scrolling_perf_features snow-stitch-images-c/perf-instrumentation)
     endif()
+    # The Rust selector service implements Windows UI Automation and the macOS
+    # accessibility backends only, so its C ABI crate has no Linux target and is
+    # left out of the bundle there.
+    set(_snow_shot_ffi_targets snow_capture_c snow_stitch_images_c)
+    set(_snow_shot_ffi_packages snow-capture-c snow-stitch-images-c)
+    set(_snow_shot_ffi_output_names snow_capture_c snow_stitch_images_c)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        list(APPEND _snow_shot_ffi_targets snow_ui_selector_c)
+        list(APPEND _snow_shot_ffi_packages snow-ui-selector-c)
+        list(APPEND _snow_shot_ffi_output_names snow_ui_selector_c)
+    endif()
     snow_add_rust_static_libraries(snow_shot_rust_ffi
         MANIFEST_DIR "${SNOW_SHOT_CAPTURE_CRATES_DIR}"
         FEATURES ${_snow_scrolling_perf_features}
         TARGETS
-            snow_capture_c
-            snow_ui_selector_c
-            snow_stitch_images_c
+            ${_snow_shot_ffi_targets}
         PACKAGES
-            snow-capture-c
-            snow-ui-selector-c
-            snow-stitch-images-c
+            ${_snow_shot_ffi_packages}
         OUTPUT_NAMES
-            snow_capture_c
-            snow_ui_selector_c
-            snow_stitch_images_c
+            ${_snow_shot_ffi_output_names}
         STRIP_MSVC_DIRECTIVES
     )
+    unset(_snow_shot_ffi_targets)
+    unset(_snow_shot_ffi_packages)
+    unset(_snow_shot_ffi_output_names)
 endif()
 
 # Selector framework requirements travel with the Rust static library on both Apple targets.
@@ -242,9 +289,34 @@ endif()
 # recognition lives in the standalone OCR process. Pin the config package to
 # the manifest-installed copy: the Rust OpenCV crates export a user-level
 # OpenCV_DIR that would otherwise shadow it.
-set(OpenCV_DIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/opencv4" CACHE PATH
-    "OpenCV package configuration directory" FORCE)
+if(WIN32)
+    set(OpenCV_DIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/opencv4" CACHE PATH
+        "OpenCV package configuration directory" FORCE)
+endif()
 find_package(OpenCV CONFIG REQUIRED)
+# Stock OpenCV only offers a path-based WeChatQRCode constructor; the vendored
+# OpenCV used on Windows/macOS carries an overlay patch that adds an in-memory
+# buffer overload. Detect which one this build has.
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_INCLUDES "${OpenCV_INCLUDE_DIRS}")
+set(CMAKE_REQUIRED_LIBRARIES "${OpenCV_LIBS}")
+check_cxx_source_compiles("
+#include <opencv2/wechat_qrcode.hpp>
+#include <vector>
+int main() {
+    std::vector<unsigned char> a;
+    std::vector<unsigned char> b;
+    std::vector<unsigned char> c;
+    std::vector<unsigned char> d;
+    cv::wechat_qrcode::WeChatQRCode code(a, b, c, d);
+    (void)code;
+    return 0;
+}" SNOW_SHOT_QR_HAS_IN_MEMORY_MODELS)
+unset(CMAKE_REQUIRED_INCLUDES)
+unset(CMAKE_REQUIRED_LIBRARIES)
+if(SNOW_SHOT_QR_HAS_IN_MEMORY_MODELS)
+    add_compile_definitions(SNOW_SHOT_QR_HAS_IN_MEMORY_MODELS=1)
+endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/FetchSnowShotQrModels.cmake")
 snow_shot_fetch_qr_models(SNOW_SHOT_QR_MODELS_DIR)
 # ONNX Runtime backs the standalone OCR process: static release builds link
@@ -352,6 +424,14 @@ if(SNOW_SHOT_OCR_STATIC_ONNXRUNTIME)
 endif()
 
 if(APPLE)
+    set(SNOW_SHOT_OCR_PROCESS_NO_DEFAULT_FEATURES NO_DEFAULT_FEATURES)
+    set(SNOW_SHOT_OCR_PROCESS_FEATURES dynamic-onnx-runtime)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Linux resolves ONNX Runtime from the system package and loads it at
+    # runtime, mirroring the Apple layout. DirectML is a Windows-only
+    # execution provider and is never selected here.
     set(SNOW_SHOT_OCR_PROCESS_NO_DEFAULT_FEATURES NO_DEFAULT_FEATURES)
     set(SNOW_SHOT_OCR_PROCESS_FEATURES dynamic-onnx-runtime)
 endif()
@@ -1240,13 +1320,24 @@ if(APPLE)
         src/platform/macos/windowcaptureexclusion.mm)
     list(APPEND PROJECT_HEADERS include/snow_shot/platform/macos/applicationactivation.h)
 endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # The Windows implementation of the capture-exclusion API is compiled away
+    # on Linux, so the X11/Wayland behaviour of the same contract lives here.
+    list(APPEND PROJECT_CXX_SOURCES
+        src/platform/linux/windowcaptureexclusion.cpp)
+endif()
 
 if(MSVC)
     set_source_files_properties(src/presentation/services/screenshotclipboarddibdecoder_avx2.cpp
         PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i.86)$")
+    # Per-source ISA flags cannot share the target precompiled header or a unity
+    # blob: GCC rejects a PCH that was built with different ISA settings.
     set_source_files_properties(src/presentation/services/screenshotclipboarddibdecoder_avx2.cpp
-        PROPERTIES COMPILE_OPTIONS "-mavx2")
+        PROPERTIES
+            COMPILE_OPTIONS "-mavx2"
+            SKIP_UNITY_BUILD_INCLUSION ON
+            SKIP_PRECOMPILE_HEADERS ON)
 endif()
 
 set(PROJECT_RCC_SOURCES)
@@ -4788,6 +4879,10 @@ if(SNOW_SHOT_BUILD_TESTS)
             tests/macos_capture_exclusion_probe.mm)
         target_link_libraries(snow-shot-screen-recording-controller-tests PRIVATE "${SNOW_SHOT_APPKIT_FRAMEWORK}")
     endif()
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_sources(snow-shot-screen-recording-controller-tests PRIVATE
+            src/platform/linux/windowcaptureexclusion.cpp)
+    endif()
     target_compile_definitions(snow-shot-screen-recording-controller-tests PRIVATE SNOW_SHOT_TEST_HOOKS=1)
     target_sources(snow-shot-screen-recording-controller-tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/../test-support/fonts/recording_test_fonts.qrc")
@@ -5934,7 +6029,6 @@ target_link_libraries(
         snow_draw_engine_qt_canvas
         snow_capture_c
         snow_recording_c
-        snow_ui_selector_c
         snow_visual_region_detector_c
         snow_stitch_images_c
         opencv_wechat_qrcode
@@ -5943,6 +6037,9 @@ target_link_libraries(
         Qt6::Svg
         Qt6::Network
 )
+if(TARGET snow_ui_selector_c)
+    target_link_libraries(snow_shot PRIVATE snow_ui_selector_c)
+endif()
 
 target_compile_definitions(snow_shot PRIVATE
     $<$<CONFIG:Release>:QT_NO_DEBUG_OUTPUT>
@@ -6317,21 +6414,35 @@ if(WIN32)
         NO_DEFAULT_PATH
         REQUIRED
     )
-    set(_SNOW_SHOT_SAVED_PKG_CONFIG_PATH "$ENV{PKG_CONFIG_PATH}")
+endif()
+
+# FFmpeg is discovered through pkg-config on every platform. Windows reads the
+# manifest-installed vcpkg tree, while Linux uses the distribution packages that
+# live on the default pkg-config search path, so the prefix override only
+# applies where a non-system prefix exists.
+set(_SNOW_SHOT_SAVED_PKG_CONFIG_PATH "$ENV{PKG_CONFIG_PATH}")
+if(WIN32)
     set(ENV{PKG_CONFIG_PATH} "${SNOW_FFMPEG_ROOT}/lib/pkgconfig")
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(SNOW_SHOT_FFMPEG REQUIRED IMPORTED_TARGET GLOBAL
-        libavformat
-        libavcodec
-        libswresample
-        libswscale
-        libavutil
-        # FFmpeg's generated static .pc files omit this private QSV dependency.
-        # Keep it on the shared imported target for every Rust FFI consumer.
-        vpl
-    )
-    set(ENV{PKG_CONFIG_PATH} "${_SNOW_SHOT_SAVED_PKG_CONFIG_PATH}")
-    unset(_SNOW_SHOT_SAVED_PKG_CONFIG_PATH)
+endif()
+find_package(PkgConfig REQUIRED)
+set(_snow_shot_ffmpeg_modules
+    libavformat
+    libavcodec
+    libswresample
+    libswscale
+    libavutil
+)
+if(WIN32)
+    # FFmpeg's generated static .pc files omit this private QSV dependency.
+    # Keep it on the shared imported target for every Rust FFI consumer.
+    list(APPEND _snow_shot_ffmpeg_modules vpl)
+endif()
+pkg_check_modules(SNOW_SHOT_FFMPEG REQUIRED IMPORTED_TARGET GLOBAL
+    ${_snow_shot_ffmpeg_modules}
+)
+unset(_snow_shot_ffmpeg_modules)
+set(ENV{PKG_CONFIG_PATH} "${_SNOW_SHOT_SAVED_PKG_CONFIG_PATH}")
+unset(_SNOW_SHOT_SAVED_PKG_CONFIG_PATH)
     # Canvas-only consumers also reach recording symbols in the bundled archive.
     if(TARGET snow_shot_rust_ffi_bundle)
         target_link_libraries(snow_shot_rust_ffi_bundle INTERFACE PkgConfig::SNOW_SHOT_FFMPEG)
@@ -6339,8 +6450,10 @@ if(WIN32)
     target_link_libraries(snow_shot PRIVATE PkgConfig::SNOW_SHOT_FFMPEG)
     if(TARGET snow-shot-screen-recording-controller-tests)
         target_link_libraries(snow-shot-screen-recording-controller-tests PRIVATE PkgConfig::SNOW_SHOT_FFMPEG)
-        set_property(TEST snow-shot-screen-recording-controller-tests snow-shot-recording-effects-preview-tests APPEND PROPERTY
-            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${SNOW_FFMPEG_ROOT}/bin")
+        if(WIN32)
+            set_property(TEST snow-shot-screen-recording-controller-tests snow-shot-recording-effects-preview-tests APPEND PROPERTY
+                ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${SNOW_FFMPEG_ROOT}/bin")
+        endif()
     endif()
     if(TARGET snow-shot-screenshot-canvas-renderer-tests)
         target_link_libraries(snow-shot-screenshot-canvas-renderer-tests PRIVATE
@@ -6368,38 +6481,41 @@ if(WIN32)
         if(TARGET ${_snow_shot_ocr_background_target})
             target_link_libraries(${_snow_shot_ocr_background_target} PRIVATE
                 PkgConfig::SNOW_SHOT_FFMPEG)
-            set_property(TEST ${_snow_shot_ocr_background_target} APPEND PROPERTY
-                ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${SNOW_FFMPEG_ROOT}/bin")
+            if(WIN32)
+                set_property(TEST ${_snow_shot_ocr_background_target} APPEND PROPERTY
+                    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${SNOW_FFMPEG_ROOT}/bin")
+            endif()
         endif()
     endforeach()
     unset(_snow_shot_ocr_background_target)
-    if(EXISTS "${SNOW_SHOT_FFMPEG_BIN_DIR}" AND NOT SNOW_SHOT_RELEASE_STATIC)
-        set(SNOW_SHOT_FFMPEG_DLL_PATTERNS
-            "avcodec-*.dll"
-            "avdevice-*.dll"
-            "avfilter-*.dll"
-            "avformat-*.dll"
-            "avutil-*.dll"
-            "swresample-*.dll"
-            "swscale-*.dll"
-            "libx264-*.dll"
-            "libx265*.dll"
-            "libwebp*.dll"
-            "libsharpyuv*.dll"
-            "openh264-*.dll"
-            "vpl*.dll"
-        )
-        set(SNOW_SHOT_FFMPEG_DLLS)
-        foreach(_ffmpeg_dll_pattern IN LISTS SNOW_SHOT_FFMPEG_DLL_PATTERNS)
-            file(GLOB _ffmpeg_matching_dlls
-                "${SNOW_SHOT_FFMPEG_BIN_DIR}/${_ffmpeg_dll_pattern}"
+    if(WIN32)
+        if(EXISTS "${SNOW_SHOT_FFMPEG_BIN_DIR}" AND NOT SNOW_SHOT_RELEASE_STATIC)
+            set(SNOW_SHOT_FFMPEG_DLL_PATTERNS
+                "avcodec-*.dll"
+                "avdevice-*.dll"
+                "avfilter-*.dll"
+                "avformat-*.dll"
+                "avutil-*.dll"
+                "swresample-*.dll"
+                "swscale-*.dll"
+                "libx264-*.dll"
+                "libx265*.dll"
+                "libwebp*.dll"
+                "libsharpyuv*.dll"
+                "openh264-*.dll"
+                "vpl*.dll"
             )
-            list(APPEND SNOW_SHOT_FFMPEG_DLLS ${_ffmpeg_matching_dlls})
-        endforeach()
-        set(SNOW_SHOT_FFMPEG_RUNTIME_FILES ${SNOW_SHOT_FFMPEG_DLLS}
-            CACHE INTERNAL "FFmpeg runtime files installed with Snow Shot.")
+            set(SNOW_SHOT_FFMPEG_DLLS)
+            foreach(_ffmpeg_dll_pattern IN LISTS SNOW_SHOT_FFMPEG_DLL_PATTERNS)
+                file(GLOB _ffmpeg_matching_dlls
+                    "${SNOW_SHOT_FFMPEG_BIN_DIR}/${_ffmpeg_dll_pattern}"
+                )
+                list(APPEND SNOW_SHOT_FFMPEG_DLLS ${_ffmpeg_matching_dlls})
+            endforeach()
+            set(SNOW_SHOT_FFMPEG_RUNTIME_FILES ${SNOW_SHOT_FFMPEG_DLLS}
+                CACHE INTERNAL "FFmpeg runtime files installed with Snow Shot.")
+        endif()
     endif()
-endif()
 
 if(MSVC)
     # Parallel CL invocations otherwise race over the target's shared PDB.
@@ -6478,14 +6594,14 @@ if(SNOW_SHOT_ENABLE_STRICT_COMPILE)
         )
     endif()
 
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(snow_shot PRIVATE
-            -Wduplicated-cond
-            -Wduplicated-branches
-            -Wlogical-op
-            -Wuseless-cast
-        )
-    endif()
+    # GCC-only diagnostics are deliberately not enabled here. -Wduplicated-cond,
+    # -Wduplicated-branches, -Wlogical-op and -Wuseless-cast have no Clang or
+    # MSVC counterpart, so the sources were never written to satisfy them, and
+    # several casts they flag are meaningful on the other compilers (signedness
+    # and width changes for printf formats). CMake de-duplicates compile options,
+    # so appending -Wno-* after an enabling flag cannot reliably override it;
+    # leaving the checks off keeps GCC on par with the compilers this project
+    # targets.
 endif()
 
 set_target_properties(snow_shot PROPERTIES
@@ -6740,6 +6856,40 @@ install(DIRECTORY
     DESTINATION "${CMAKE_INSTALL_DATADIR}/snow-shot/licenses/third-party"
     OPTIONAL
 )
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Freedesktop integration. The desktop entry doubles as the application id
+    # that Wayland compositors match a running window against, so the installed
+    # icon names are derived from the same identifier. The Windows icon carries
+    # nine independently encoded PNG frames, which become the hicolor ladder at
+    # install time; the SVG stays available for scalable renderings.
+    set(_snow_shot_linux_desktop_id "${SNOW_SHOT_LINUX_DESKTOP_ID}")
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/${_snow_shot_linux_desktop_id}.desktop"
+        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications"
+    )
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/app-icon.svg"
+        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps"
+        RENAME "${_snow_shot_linux_desktop_id}.svg"
+    )
+    install(CODE "
+        execute_process(
+            COMMAND
+                \"${Python3_EXECUTABLE}\"
+                \"${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/extract-app-icons.py\"
+                \"${CMAKE_CURRENT_SOURCE_DIR}/resources/app-icon.ico\"
+                \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor\"
+                \"${_snow_shot_linux_desktop_id}\"
+            RESULT_VARIABLE _snow_shot_icon_result
+        )
+        if(NOT _snow_shot_icon_result EQUAL 0)
+            message(FATAL_ERROR
+                \"Failed to install the Snow Shot hicolor application icons.\")
+        endif()
+    ")
+    unset(_snow_shot_linux_desktop_id)
+endif()
 
 foreach(_conversion_view_target IN ITEMS snow_shot snow-shot-recognition-window-tests
         snow-shot-recognition-session-controller-tests snow-shot-pinned-window-tests

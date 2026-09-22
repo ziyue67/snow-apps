@@ -181,7 +181,7 @@ bool matching_descriptor(const DocumentDescriptor& left, const DocumentDescripto
 }
 
 struct DecodeBufferGuard final {
-    explicit DecodeBufferGuard(WebPDecBuffer* buffer) : buffer(buffer) {}
+    explicit DecodeBufferGuard(WebPDecBuffer* decoded) : buffer(decoded) {}
     ~DecodeBufferGuard() {
         WebPFreeDecBuffer(buffer);
     }
@@ -268,7 +268,7 @@ Result<DocumentInfo> animation_document_info(WebPAnimDecoder* decoder, const Web
     if (!WebPDemuxGetFrame(demuxer, 1, &iterator))
         return webp_error(ErrorCode::corrupt_data, "WebP animation has no readable frames.");
     struct IteratorGuard final {
-        explicit IteratorGuard(WebPIterator* iterator) : iterator(iterator) {}
+        explicit IteratorGuard(WebPIterator* source) : iterator(source) {}
         ~IteratorGuard() {
             WebPDemuxReleaseIterator(iterator);
         }
@@ -477,7 +477,7 @@ Result<WebpMetadata> read_webp_metadata(std::span<const std::byte> bytes,
         if (!WebPDemuxGetChunk(demuxer.get(), fourcc, 1, &iterator))
             return {};
         struct Guard final {
-            explicit Guard(WebPChunkIterator* value) : value(value) {}
+            explicit Guard(WebPChunkIterator* chunk) : value(chunk) {}
             ~Guard() {
                 WebPDemuxReleaseChunkIterator(value);
             }

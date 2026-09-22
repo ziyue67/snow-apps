@@ -134,8 +134,20 @@ if(SNOW_IMAGE_CODEC_PNG)
     set(CMAKE_REQUIRED_LIBRARIES "${_snow_image_required_libraries}")
     unset(_snow_image_required_libraries)
     if(NOT SNOW_IMAGE_HAS_ZLIB_NG_COMPAT)
-        message(FATAL_ERROR
-            "PNG support requires zlib-ng compatibility mode. Configure through the repository vcpkg overlay.")
+        # zlib-ng in compatibility mode is the bundled runtime on Windows and
+        # macOS. Linux distributions ship stock zlib, and the PNG codec only
+        # uses portable libpng/zlib entry points, so accept it there and keep
+        # the strict check everywhere else. SNOW_IMAGE_ALLOW_STOCK_ZLIB carries
+        # that decision into compression_backend.cpp, which otherwise rejects a
+        # zlib without the zlib-ng compatibility macros.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            message(STATUS
+                "snow_image: using stock zlib instead of zlib-ng compatibility mode.")
+            list(APPEND SNOW_IMAGE_PRIVATE_DEFINITIONS SNOW_IMAGE_ALLOW_STOCK_ZLIB=1)
+        else()
+            message(FATAL_ERROR
+                "PNG support requires zlib-ng compatibility mode. Configure through the repository vcpkg overlay.")
+        endif()
     endif()
     list(APPEND SNOW_IMAGE_SOURCES src/codecs/png_codec.cpp src/codecs/png_codec.h)
     list(APPEND SNOW_IMAGE_PRIVATE_LIBRARIES PNG::PNG ZLIB::ZLIB)
@@ -143,12 +155,72 @@ if(SNOW_IMAGE_CODEC_PNG)
 endif()
 
 if(SNOW_IMAGE_CODEC_JPEG)
-    find_package(libjpeg-turbo CONFIG REQUIRED)
+    # The JPEG codec uses the libjpeg-turbo 3.x handle API (tj3Init, tj3Decompress8
+    # and the TJPARAM_* accessors); libjpeg-turbo 2.x does not provide it. vcpkg,
+    # the static Qt kits and the repository-managed .tools/libjpeg-turbo build all
+    # export a CMake package, and a static-only build exports just the -static
+    # targets, so accept either spelling before falling back to raw system paths.
+    find_package(libjpeg-turbo CONFIG QUIET)
+    if(NOT TARGET libjpeg-turbo::jpeg AND NOT TARGET libjpeg-turbo::jpeg-static)
+        find_path(SNOW_IMAGE_JPEG_INCLUDE_DIR NAMES jpeglib.h)
+        find_library(SNOW_IMAGE_JPEG_LIBRARY NAMES jpeg)
+        find_library(SNOW_IMAGE_TURBOJPEG_LIBRARY NAMES turbojpeg)
+        if(NOT SNOW_IMAGE_JPEG_INCLUDE_DIR OR NOT SNOW_IMAGE_JPEG_LIBRARY OR
+           NOT SNOW_IMAGE_TURBOJPEG_LIBRARY)
+            message(FATAL_ERROR
+                "JPEG support requires libjpeg-turbo 3.x. Install the libjpeg-turbo "
+                "and libturbojpeg development packages, or configure through the "
+                "repository vcpkg overlay.")
+        endif()
+        add_library(libjpeg-turbo::jpeg UNKNOWN IMPORTED)
+        set_target_properties(libjpeg-turbo::jpeg PROPERTIES
+            IMPORTED_LOCATION "${SNOW_IMAGE_JPEG_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${SNOW_IMAGE_JPEG_INCLUDE_DIR}")
+        add_library(libjpeg-turbo::turbojpeg UNKNOWN IMPORTED)
+        set_target_properties(libjpeg-turbo::turbojpeg PROPERTIES
+            IMPORTED_LOCATION "${SNOW_IMAGE_TURBOJPEG_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${SNOW_IMAGE_JPEG_INCLUDE_DIR}")
+    endif()
+
+    if(TARGET libjpeg-turbo::jpeg)
+        set(_snow_image_jpeg_target libjpeg-turbo::jpeg)
+    else()
+        set(_snow_image_jpeg_target libjpeg-turbo::jpeg-static)
+    endif()
+    if(TARGET libjpeg-turbo::turbojpeg)
+        set(_snow_image_turbojpeg_target libjpeg-turbo::turbojpeg)
+    else()
+        set(_snow_image_turbojpeg_target libjpeg-turbo::turbojpeg-static)
+    endif()
+
+    # Detect the API generation through the header instead of a version macro:
+    # turbojpeg.h carries no TJ_VERSION_* defines, but the 3.x header adds the
+    # TJ_NUMINIT block that gates the handle API. Failing here keeps a 2.x
+    # installation from turning into a wall of missing tj3* symbols later.
+    include(CheckCXXSourceCompiles)
+    set(_snow_image_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+    set(CMAKE_REQUIRED_LIBRARIES
+        ${_snow_image_jpeg_target}
+        ${_snow_image_turbojpeg_target})
+    check_cxx_source_compiles(
+        "#include <turbojpeg.h>\n#if !defined(TJ_NUMINIT) || TJ_NUMINIT < 3\n#error libjpeg-turbo 3.x required\n#endif\nint main() { return 0; }"
+        SNOW_IMAGE_HAS_TURBOJPEG_3)
+    set(CMAKE_REQUIRED_LIBRARIES "${_snow_image_required_libraries}")
+    unset(_snow_image_required_libraries)
+    if(NOT SNOW_IMAGE_HAS_TURBOJPEG_3)
+        message(FATAL_ERROR
+            "JPEG support requires the libjpeg-turbo 3.x API (tj3Init and the "
+            "TJPARAM_* accessors). Point CMAKE_PREFIX_PATH at a libjpeg-turbo 3.x "
+            "installation, or configure through the repository vcpkg overlay.")
+    endif()
+
     list(APPEND SNOW_IMAGE_SOURCES src/codecs/jpeg_codec.cpp src/codecs/jpeg_codec.h)
     list(APPEND SNOW_IMAGE_PRIVATE_LIBRARIES
-        $<IF:$<TARGET_EXISTS:libjpeg-turbo::jpeg>,libjpeg-turbo::jpeg,libjpeg-turbo::jpeg-static>
-        $<IF:$<TARGET_EXISTS:libjpeg-turbo::turbojpeg>,libjpeg-turbo::turbojpeg,libjpeg-turbo::turbojpeg-static>
+        ${_snow_image_jpeg_target}
+        ${_snow_image_turbojpeg_target}
     )
+    unset(_snow_image_jpeg_target)
+    unset(_snow_image_turbojpeg_target)
     list(APPEND SNOW_IMAGE_PRIVATE_DEFINITIONS SNOW_IMAGE_HAS_JPEG=1)
 endif()
 

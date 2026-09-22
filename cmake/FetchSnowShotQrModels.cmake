@@ -12,7 +12,17 @@ function(snow_shot_fetch_qr_models out_var)
     set(_destination "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../artifacts/qr-models-wechat")
     file(MAKE_DIRECTORY "${_destination}")
 
-    set(_base_url "https://raw.githubusercontent.com/WeChatCV/opencv_3rdparty/a8b69ccc738421293254aec5ddb38bd523503252")
+    # The pinned revision keeps every build consuming identical payloads. Only
+    # the host prefix is overridable, so restricted networks can point at a
+    # mirror (for example a GitHub proxy) without weakening the SHA-512 check
+    # below.
+    if(NOT DEFINED SNOW_SHOT_QR_MODEL_BASE_URL OR SNOW_SHOT_QR_MODEL_BASE_URL STREQUAL "")
+        set(SNOW_SHOT_QR_MODEL_BASE_URL
+            "https://raw.githubusercontent.com/WeChatCV/opencv_3rdparty/a8b69ccc738421293254aec5ddb38bd523503252"
+            CACHE STRING
+            "Base URL hosting the pinned WeChat QR models downloaded at configure time.")
+    endif()
+    set(_base_url "${SNOW_SHOT_QR_MODEL_BASE_URL}")
     set(_models
         "detect.caffemodel|58d62faf8679d3f568a26a1d9f7c2e88060426a440315ca8bce7b3b5a8efa34be670afd0abfd0dd5d89f89a042a2408ea602f937080abc6910c2e497b7f5a4b8"
         "sr.caffemodel|917c6f6b84a898b8c8c85c79359e48a779c8a600de563dac2e1c5d013401e9ac9dbcd435013a4ed7a69fc936839fb189aaa3038c127d04ceb6fd3b8fd9dd67bd"
