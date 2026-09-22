@@ -13,7 +13,7 @@ compatibility is maintained here as a downstream port.
 | Screenshot selection UI | Verified on Ubuntu 26.04 | GNOME Wayland screenshot capture showed real screen content instead of a blank image. |
 | OCR | Packaged, runtime verification pending | ONNX Runtime 1.20.0 is bundled in the deb and linked at install time. |
 | Primary-selection text capture | Implemented, runtime verification pending | Uses `wl-paste` or `xclip`, then falls back to the Rust helper. |
-| Translation and AI chat UI | Translation UI verified; provider fallback added | The page loads on Linux and the default Youdao provider now uses the working public endpoint. |
+| Translation and AI chat UI | Verified on Ubuntu 26.04 | `你好` was translated to `Hello` through the Linux UI and the Youdao fallback provider. |
 | Global hotkeys | Partial | Works on X11; GNOME Wayland may reject global shortcut registration. |
 | Focused-window capture | Partial | Uses X11 active-window lookup and xcap window capture; native Wayland windows may fall back to monitor capture. |
 | Always-on-top | Partial | Uses `wmctrl` on X11; native Wayland support depends on the compositor. |
@@ -45,4 +45,4 @@ Manual verification performed on Ubuntu 26.04:
 - Installed the generated deb and confirmed `ldd /usr/bin/app` has no missing libraries.
 - Triggered screenshot capture from the tray menu; the selection window displayed the real desktop content.
 - Opened the Translation page and confirmed the source/target/service controls render correctly.
-- Verified the fallback Youdao endpoint returns a translated result for `hello`.
+- Translated `你好` to `Hello` through the UI using the fallback Youdao provider.
