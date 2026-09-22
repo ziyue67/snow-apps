@@ -54,7 +54,9 @@ function(snow_apply_strict_warnings target)
                 -Wno-useless-cast
                 -Wno-duplicated-branches
                 -Wno-changes-meaning
-                -Wno-subobject-linkage)
+                -Wno-subobject-linkage
+                -Wno-clobbered
+                -Wno-null-dereference)
         endif()
     else()
         message(WARNING "Strict warning flags are not defined for ${CMAKE_CXX_COMPILER_ID}.")
@@ -75,7 +77,9 @@ function(snow_apply_release_options target)
         return()
     endif()
 
-    set_property(TARGET "${target}" PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set_property(TARGET "${target}" PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    endif()
     if(MSVC)
         target_compile_options("${target}" PRIVATE
             $<$<CONFIG:Release>:/O2>
@@ -95,11 +99,14 @@ function(snow_apply_release_options target)
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         target_compile_options("${target}" PRIVATE
             $<$<CONFIG:Release>:-O3>
-            $<$<CONFIG:Release>:-flto>
+            $<$<AND:$<CONFIG:Release>,$<NOT:$<STREQUAL:${CMAKE_SYSTEM_NAME},Linux>>>:-flto>
             $<$<CONFIG:Release>:-ffunction-sections>
             $<$<CONFIG:Release>:-fdata-sections>
         )
-        target_link_options("${target}" PRIVATE $<$<CONFIG:Release>:-flto>)
+        # Linux omits -flto here as well: see the IPO note in the top-level
+        # CMakeLists for why LTO is disabled on this platform.
+        target_link_options("${target}" PRIVATE
+            $<$<AND:$<CONFIG:Release>,$<NOT:$<STREQUAL:${CMAKE_SYSTEM_NAME},Linux>>>:-flto>)
     endif()
 endfunction()
 
@@ -133,7 +140,9 @@ function(snow_enable_strict_warnings)
                 -Wno-useless-cast
                 -Wno-duplicated-branches
                 -Wno-changes-meaning
-                -Wno-subobject-linkage)
+                -Wno-subobject-linkage
+                -Wno-clobbered
+                -Wno-null-dereference)
         endif()
     else()
         message(WARNING "Strict warning flags are not defined for ${CMAKE_CXX_COMPILER_ID}.")

@@ -90,10 +90,13 @@ set(SNOW_RUST_RELEASE_PROFILE "release" CACHE STRING
 snow_workspace_configure_paths()
 snow_workspace_configure_options()
 
-if(SNOW_APPS_ENABLE_RELEASE_OPTIMIZATION)
+if(SNOW_APPS_ENABLE_RELEASE_OPTIMIZATION AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # CMake's IPO abstraction selects /GL + /LTCG on MSVC and -flto on GCC/Clang.
     # Applying it at directory scope also covers the C++ libraries that feed the
     # Snow Shot executable, instead of optimizing only the final executable.
+    # Linux keeps IPO off: with LTO the linker emits copy relocations for Qt and
+    # libstdc++ data (staticMetaObject, typeinfo, vtables), and the stale copies
+    # crash QApplication construction.
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL ON)
 endif()
