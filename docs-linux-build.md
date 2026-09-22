@@ -243,8 +243,17 @@ well, or the shortcut stops firing while either lock is active. Then loop on
 back to the caller: the handler must reach the main thread (a `QObject` context
 with a queued invocation) because the manager updates UI in response.
 
-Wayland has no equivalent of `XGrabKey`; a Wayland session needs the desktop
-portal's global shortcuts interface instead, which the compositor may refuse.
+Wayland has no equivalent of `XGrabKey`: a grab lands on the XWayland root, so
+registration reports success while the shortcut only fires when an X11 client
+holds focus. The backend therefore reports `UnsupportedPlatform` for validation
+and registration whenever `WAYLAND_DISPLAY` is set, and
+`tests/global_shortcut_backend_tests.cpp` pins that down without needing a
+display. The real fix is the desktop portal's `GlobalShortcuts` interface —
+`CreateSession`, then `BindShortcuts`, then the session's `Activated` signal —
+which the compositor may refuse. Note that a container's portal exposes neither
+`GlobalShortcuts` nor `Screenshot`, because it only publishes interfaces that
+have a working backend and none can start without a desktop session, so that
+path has to be verified against a mock.
 
 ## Wayland capture
 
@@ -296,10 +305,17 @@ follow-up work:
 - **Screen capture scope.** Whole-screen capture works; per-monitor enumeration
   and window capture do not, so `inspect_window` and `create_window_capturer`
   report an unsupported-platform error. Multi-head setups are seen as one
-  monitor covering the X screen, and Wayland has no backend at all.
+  monitor covering the X screen, and the portal reports the whole desktop as a
+  single display. A Wayland session goes through `org.freedesktop.portal.Screenshot`
+  (see above) rather than X11.
   `CaptureCapabilities::current()` reports the X11 backend with BGRA CPU frames
   on Linux, and advertises neither native frames nor window enumeration, so the
-  application sees exactly what the backend provides.
+  application sees exactly what the backend provides. It still advertises
+  nothing on a Wayland session, because the capabilities probe has not been
+  taught about the portal path yet, and the direct-capture entry point
+  (`captureDirectTarget`) has no portal fallback either: the portal returns the
+  whole desktop, which cannot satisfy a focused-window request and only
+  approximates a single monitor on a mixed-DPI multi-head setup.
 - **Tray icon warning.** Starting the packaged build prints
   `QObject::connect: No such signal QPlatformNativeInterface::systemTrayWindowChanged(QScreen*)`.
   The string lives only in Qt's own `libQt6Widgets.so.6` (three occurrences) and
