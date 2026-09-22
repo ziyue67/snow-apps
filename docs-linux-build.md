@@ -352,6 +352,13 @@ follow-up work:
   features stay off. Global shortcuts and the physical cursor no longer do:
   shortcuts are grabbed through X11 (`XGrabKey`, with the Wayland guard above)
   or brokered through the portal, and the cursor is read and warped through X11.
+- **The bundled Qt runtime ships without its own licence text.** The package
+  carries the application's `COPYRIGHT` and GPL-3.0 `LICENSE`, both third-party
+  notice documents, and a `COPYRIGHT`/`LICENSE` pair per repository component
+  under `/usr/share/snow-shot/licenses/`, but nothing covers the Qt and ICU
+  libraries installed beside it. The Qt kit provides no licence files to
+  install, so closing this means sourcing Qt's LGPL-3.0/GPL-3.0 text deliberately
+  rather than copying it, which is why it is recorded here instead of guessed at.
 - **Auto-update.** The release contract is Windows-only; the updater is not
   built for Linux.
 - **Asset location.** The install rules put `assets/` and `audios/` below
