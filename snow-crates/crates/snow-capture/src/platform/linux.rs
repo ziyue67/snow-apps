@@ -81,6 +81,15 @@ fn unsupported(what: &str) -> CaptureError {
     ))
 }
 
+/// Whether this process runs inside a Wayland session.
+///
+/// X11 capture reads the X root window, and under Wayland that window belongs to
+/// XWayland and holds no screen content, so a capture would silently return
+/// blank frames. Reporting the limitation is better than returning them.
+pub(crate) fn wayland_session() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_some_and(|value| !value.is_empty())
+}
+
 /// A display connection closed on drop, so every call site can use `?`.
 struct Display(*mut c_void);
 
@@ -151,6 +160,11 @@ fn screen_monitor(display: &Display) -> MonitorId {
 
 /// Read the pixels of the X screen into a frame.
 fn capture_screen() -> CaptureResult<Frame> {
+    if wayland_session() {
+        return Err(CaptureError::platform(anyhow::anyhow!(
+            "X11 capture cannot read a Wayland session; the XDG Desktop Portal backend is required"
+        )));
+    }
     let display = Display::open()?;
     let (width, height) = display.screen_size();
     if width <= 0 || height <= 0 {

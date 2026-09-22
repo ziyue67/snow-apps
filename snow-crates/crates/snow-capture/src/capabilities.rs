@@ -54,6 +54,20 @@ impl CaptureCapabilities {
         // implemented yet, which is why window_enumeration stays false.
         #[cfg(target_os = "linux")]
         {
+            // Under Wayland the X root window belongs to XWayland and has no
+            // screen content, so the X11 backend cannot capture. Advertise no
+            // backend until the XDG Desktop Portal path exists, instead of
+            // offering one that returns blank frames.
+            if crate::platform::linux::wayland_session() {
+                return Self {
+                    backends: vec![],
+                    desktop_space: DesktopSpace::PhysicalPixels,
+                    cpu_formats: vec![],
+                    native_frames: false,
+                    hdr_capture: false,
+                    window_enumeration: false,
+                };
+            }
             Self {
                 backends: vec![CaptureBackendKind::X11],
                 desktop_space: DesktopSpace::PhysicalPixels,

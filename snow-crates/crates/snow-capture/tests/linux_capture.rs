@@ -20,6 +20,14 @@ use snow_capture::CaptureTarget;
 #[test]
 fn advertises_the_x11_backend() {
     let capabilities = CaptureCapabilities::current();
+    if wayland_session() {
+        // Offering the X11 backend here would promise frames that cannot be read.
+        assert!(
+            capabilities.backends.is_empty() && capabilities.cpu_formats.is_empty(),
+            "a Wayland session must not advertise X11 capture"
+        );
+        return;
+    }
     assert_eq!(
         capabilities.backends,
         vec![CaptureBackendKind::X11],
@@ -40,7 +48,13 @@ fn advertises_the_x11_backend() {
 }
 
 fn display_available() -> bool {
-    std::env::var_os("DISPLAY").is_some()
+    std::env::var_os("DISPLAY").is_some() && !wayland_session()
+}
+
+/// Mirrors the backend's own guard: under Wayland the X root window belongs to
+/// XWayland and holds no screen content, so these checks do not apply.
+fn wayland_session() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_some_and(|value| !value.is_empty())
 }
 
 #[test]
