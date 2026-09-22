@@ -307,6 +307,7 @@ fn backend_name(kind: CaptureBackendKind) -> &'static str {
         CaptureBackendKind::WindowsGraphicsCapture => "wgc",
         CaptureBackendKind::Gdi => "gdi",
         CaptureBackendKind::ScreenCaptureKit => "sck",
+        CaptureBackendKind::X11 => "x11",
     }
 }
 
@@ -318,6 +319,7 @@ fn parse_backend(token: &str) -> Option<CaptureBackendKind> {
         }
         "gdi" => Some(CaptureBackendKind::Gdi),
         "sck" => Some(CaptureBackendKind::ScreenCaptureKit),
+        "x11" => Some(CaptureBackendKind::X11),
         "auto" => Some(CaptureBackendKind::Auto),
         _ => None,
     }
