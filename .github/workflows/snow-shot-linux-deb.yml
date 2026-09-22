@@ -49,6 +49,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             build-essential ninja-build cmake pkg-config git curl ca-certificates \
+            clang-format clang libclang-dev \
             python3 python3-venv python3-pip \
             libgl1-mesa-dev libvulkan-dev \
             libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
