@@ -6648,12 +6648,13 @@ if(APPLE)
     set(CMAKE_INSTALL_DATADIR "snow_shot.app/Contents/Resources")
 endif()
 if(UNIX AND NOT APPLE)
-    # Bundle the Qt runtime and the platform plugins this build links against.
-    # The Qt release is relocatable, so it derives its plugin directory from the
-    # library location: keeping the libraries in <libdir>/snow-shot and the
-    # plugins in <libdir>/snow-shot/plugins lets Qt find them without any
-    # absolute path from the build host. ICU is bundled too, because the Qt
-    # libraries link against the ICU build shipped with the same kit.
+    # Bundle the Qt runtime and the platform plugins this build links against so
+    # the package does not depend on the build host. Two details matter:
+    # the libraries go in <libdir>/snow-shot/lib because the platform plugins
+    # carry a $ORIGIN/../../lib runpath that has to reach them, and Qt searches
+    # only <applicationDirPath>/platforms on its own, so main registers the
+    # plugin directory before constructing QApplication. ICU is bundled too,
+    # because the Qt libraries link against the ICU build shipped with the kit.
     get_filename_component(_snow_shot_qt_lib_dir "${Qt6_DIR}/../.." ABSOLUTE)
     get_filename_component(_snow_shot_qt_prefix "${_snow_shot_qt_lib_dir}/.." ABSOLUTE)
     file(GLOB _snow_shot_qt_runtime

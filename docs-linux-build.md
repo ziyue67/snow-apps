@@ -199,10 +199,11 @@ follow-up work:
   archive, or make `lrelease` resolve against a matching Qt build.
 - **Generated dependencies still name the distribution Qt.** The package bundles
   the Qt 6.11.1 runtime, ICU and the platform plugins under `lib/snow-shot`, so
-  it loads and starts on a host that has no Qt 6.11.1 of its own. `shlibdeps`
-  still derives `Depends` from the distribution Qt packages (6.10.2 on the
-  reference system), which overstates what the bundled build needs; tighten the
-  dependency list once the supported distribution matrix is settled.
+  it loads and starts on a host that has no Qt 6.11.1 of its own. Those libraries
+  are private to the package, so `shlibdeps` cannot infer them and falls back to
+  the distribution Qt packages (6.10.2 on the reference system); the result
+  over-declares what the bundled build needs, and the dependency list should be
+  tightened once the supported distribution matrix is settled.
 
 ## Build configuration notes
 
