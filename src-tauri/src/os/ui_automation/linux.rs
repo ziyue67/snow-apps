@@ -166,7 +166,10 @@ async fn collect_object(
         atspi::zbus::Proxy::new(connection, destination, path, "org.a11y.atspi.Component").await
     {
         if let Ok((x, y, width, height)) = component
-            .call::<_, (i32, i32, i32, i32)>("GetExtents", &(CoordType::Screen,))
+            .call::<_, (CoordType,), (i32, i32, i32, i32)>(
+                "GetExtents",
+                &(CoordType::Screen,),
+            )
             .await
         {
             if width > 0 && height > 0 {
@@ -189,7 +192,7 @@ async fn collect_object(
         atspi::zbus::Proxy::new(connection, destination, path, "org.a11y.atspi.Accessible").await
     {
         if let Ok(children) = accessible
-            .call::<_, Vec<ObjectRefOwned>>("GetChildren", &())
+            .call::<_, (), Vec<ObjectRefOwned>>("GetChildren", &())
             .await
         {
             for child in children {
