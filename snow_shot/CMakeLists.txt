@@ -1896,6 +1896,23 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_test(NAME snow-shot-physical-cursor-tests
              COMMAND snow-shot-physical-cursor-tests)
 
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # The portal path needs a Wayland session, so the test covers the session
+        # decision and the failure contract everywhere, and the full round-trip
+        # when a mock portal is provided on the session bus.
+        add_executable(snow-shot-portal-screenshot-tests
+            tests/portal_screenshot_tests.cpp
+            include/snow_shot/platform/portalscreenshot.h
+            src/platform/linux/portalscreenshot.cpp
+        )
+        target_include_directories(snow-shot-portal-screenshot-tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        )
+        target_link_libraries(snow-shot-portal-screenshot-tests PRIVATE Qt6::Gui Qt6::DBus)
+        add_test(NAME snow-shot-portal-screenshot-tests
+                 COMMAND snow-shot-portal-screenshot-tests)
+    endif()
+
     if(WIN32)
         add_executable(snow-shot-window-chrome-tests
             tests/window_chrome_tests.cpp
