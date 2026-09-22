@@ -28,6 +28,12 @@ struct PortalShortcut {
     QVariantMap properties;
 };
 
+} // namespace snow_shot::presentation
+
+Q_DECLARE_METATYPE(snow_shot::presentation::PortalShortcut)
+
+namespace snow_shot::presentation {
+
 QDBusArgument& operator<<(QDBusArgument& argument, const PortalShortcut& shortcut) {
     argument.beginStructure();
     argument << shortcut.id << shortcut.properties;
@@ -326,6 +332,5 @@ std::unique_ptr<GlobalShortcutBackend> createWaylandGlobalShortcutBackend() {
 
 } // namespace snow_shot::presentation
 
-Q_DECLARE_METATYPE(snow_shot::presentation::PortalShortcut)
 
 #include "waylandglobalshortcuts.moc"
