@@ -152,6 +152,14 @@ follow-up work:
   frame format; window capture additionally needs `XComposite`. Wayland needs a
   portal/PipeWire path instead. Until then the offline preview and editing paths
   still work, but nothing can acquire the screen.
+- **Tray icon warning.** Starting the packaged build prints
+  `QObject::connect: No such signal QPlatformNativeInterface::systemTrayWindowChanged(QScreen*)`.
+  The string lives only in Qt's own `libQt6Widgets.so.6` (three occurrences) and
+  in neither the application binary nor `libQt6Gui`/`libqxcb`, so Qt's
+  `QSystemTrayIcon` is connecting to a platform-native signal the XCB plugin no
+  longer provides. It is a Qt-internal mismatch rather than an application
+  defect, and the connect failure is harmless; confirming tray behaviour needs a
+  real desktop session with a status-notifier host.
 - **Global shortcuts, global mouse, XDG auto-start, physical cursor and
   focused-fullscreen detection.** These platform services still resolve to the
   unsupported stubs, so the corresponding features stay off.
