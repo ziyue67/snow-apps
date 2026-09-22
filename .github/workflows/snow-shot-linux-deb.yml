@@ -74,7 +74,7 @@ jobs:
           .tools/aqt-venv/bin/pip install --upgrade pip aqtinstall
           .tools/aqt-venv/bin/aqt install-qt linux desktop 6.11.1 linux_gcc_64 \
             -O .tools/Qt -b https://download.qt.io \
-            --archives qtbase qtsvg qttools qttranslations icu qtwayland
+            --archives qtbase qtsvg qttools qttranslations icu qtwayland qtdeclarative
 
       # The JPEG codec uses the libjpeg-turbo 3.x handle API, so a distribution
       # still shipping 2.x needs a 3.x build for the configure step to accept.
