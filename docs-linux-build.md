@@ -246,6 +246,47 @@ with a queued invocation) because the manager updates UI in response.
 Wayland has no equivalent of `XGrabKey`; a Wayland session needs the desktop
 portal's global shortcuts interface instead, which the compositor may refuse.
 
+## Wayland capture
+
+A Wayland session cannot be read through X11: the X root window belongs to
+XWayland and holds no screen content, so `XGetImage` returns blank frames. The
+capture worker therefore asks
+`org.freedesktop.portal.Screenshot` when `WAYLAND_DISPLAY` is set
+(`src/platform/linux/portalscreenshot.cpp`), waits for the request object's
+`Response` signal, and turns the returned image into the captured display. The
+portal result arrives asynchronously — the method only returns a request handle —
+so the signal is subscribed to before waiting, and when the portal refuses or the
+user dismisses the prompt its own reason is reported.
+
+Verifying it needs a portal, which a container does not have, so the D-Bus
+exchange is covered separately from the session itself:
+
+```bash
+cmake --preset snow-shot-linux-x64-debug
+cmake --build --preset build-snow-shot-linux-x64-debug \
+    --target snow-shot-portal-screenshot-tests
+dbus-run-session -- bash -c \
+    "python3 snow_shot/tests/mock_portal.py & sleep 2; \
+     SNOW_SHOT_TEST_PORTAL=1 \
+     ./build/snow-shot-linux-x64-debug/snow_shot/test-bin/snow-shot-portal-screenshot-tests"
+```
+
+`tests/mock_portal.py` serves the same interface on a private bus and answers
+with a generated PNG, so the round-trip is reproducible without a desktop
+session. Two traps it documents: the `Response` signal has to be declared on a
+class instantiated at the request path, and the well-known name has to stay
+referenced or it is released and the call reaches the real portal instead.
+
+Without the mock the same binary still checks the two things that hold anywhere:
+that `portalScreenshotRequired()` follows the session type, and that a failed
+helper always explains itself. That check is gated on the session bus being
+reachable rather than poisoning `DBUS_SESSION_BUS_ADDRESS`, because
+`QDBusConnection` caches its session connection and a forced failure would leave
+that broken connection cached for the rest of the process.
+
+Not covered: taking a screenshot in a real Wayland session. That still needs a
+desktop to confirm.
+
 ## Known limitations
 
 The Linux port currently covers the build system, the platform shims and the
