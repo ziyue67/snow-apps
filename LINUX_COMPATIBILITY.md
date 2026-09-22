@@ -19,10 +19,10 @@ compatibility is maintained here as a downstream port.
 | Always-on-top | Partial | Uses `wmctrl` on X11; native Wayland support depends on the compositor. |
 | Free window drag | Implemented and build-verified | Uses the Tauri window drag API on Linux. |
 | Desktop notification | Implemented and build-verified | Uses the freedesktop notification service through `notify-rust`. |
-| Scroll screenshot | Partial | Depends on window/element discovery and the screenshot backend. |
+| Scroll screenshot | Improved | Uses the screenshot backend plus AT-SPI/window-level element discovery. |
 | Video recording | Partial | Uses system FFmpeg and `x11grab`/`pulse`; native Wayland screen capture is not complete. |
 | Multi-monitor | Partial | Monitor enumeration exists, but element-level selection is window-level only. |
-| Element-level UI automation | Not implemented | Windows uses UI Automation. Linux currently exposes window-level rectangles. |
+| Element-level UI automation | Implemented and build-verified | Uses Linux AT-SPI to collect accessible element rectangles, with window-level fallback. |
 
 ## Runtime dependencies
 
