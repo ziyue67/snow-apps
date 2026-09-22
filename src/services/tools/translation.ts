@@ -60,10 +60,55 @@ export interface TranslateData {
     to?: string;
 }
 
+type YoudaoDemoResponse = {
+    errorCode?: string;
+    translation?: string[];
+    from?: string;
+    to?: string;
+};
+
 export const translate = async (
     options: StreamFetchEventOptions<TranslateData>,
     params: TranslateParams,
 ) => {
+    // The hosted snowshot.top endpoint can return 404. Use the public Youdao
+    // demo endpoint directly for the default provider instead.
+    if (params.type === TranslationType.Youdao) {
+        try {
+            const response = await serviceBaseFetch('https://aidemo.youdao.com/trans', {
+                method: 'GET',
+                params: {
+                    q: params.content,
+                    from: params.from,
+                    to: params.to,
+                },
+            });
+
+            if (!(response instanceof ServiceResponse)) {
+                const data = (await response.json()) as YoudaoDemoResponse;
+                const translated = data.translation?.join('\n');
+
+                if (data.errorCode === '0' && translated) {
+                    if (!options.isInvalid?.()) {
+                        options.onStart?.();
+                        options.onData(
+                            ServiceResponse.success(response, '', {
+                                delta_content: translated,
+                                from: data.from,
+                                to: data.to,
+                            }),
+                        );
+                        options.onComplete?.();
+                    }
+                    return;
+                }
+            }
+        } catch {
+            // Fall through to the existing service for non-Youdao providers
+            // or temporary network failures.
+        }
+    }
+
     return streamFetch<TranslateData>('/api/v1/translation/translate', {
         method: 'POST',
         data: params,
