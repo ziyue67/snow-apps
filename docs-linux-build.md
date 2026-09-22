@@ -177,7 +177,11 @@ follow-up work:
   `UnsupportedBackend`. A Linux backend has to provide the `CaptureBackend`
   surface (`enumerate_monitors`, `primary_monitor`, `monitor_layout`,
   `inspect_window`, `create_monitor_capturer`, `create_window_capturer`), a
-  `MonitorCapturer` implementation, and `monitor_layout_from_monitors`. On X11
+  `MonitorCapturer` implementation, and `monitor_layout_from_monitors`. Only
+  `MonitorCapturer::capture` has to be written: `set_cancellation`,
+  `set_cursor_visible`, `set_screen_color_transform`, `backend_kind` and
+  `prewarm_environment` all have default implementations, and `prewarm_environment`
+  must not leave a capture session open when it returns. On X11
   that means monitor enumeration through RandR, capture through `XGetImage` or
   shared-memory `XShm`, and conversion of the returned image into the crate's
   frame format; window capture additionally needs `XComposite`. Wayland needs a
