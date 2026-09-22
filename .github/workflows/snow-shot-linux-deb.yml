@@ -60,6 +60,7 @@ jobs:
             libxcb-render-util0 libxcb-shape0 libxcb-sync1 libxcb-xfixes0 \
             libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libfontconfig1 libfreetype6 \
             libglx-mesa0 libopengl0 \
+            libwayland-client0 libwayland-cursor0 libwayland-server0 \
             libx11-dev libxi-dev libdbus-1-dev libxkbcommon-dev libssl-dev
 
       - name: Install the pinned Rust toolchain
