@@ -347,12 +347,16 @@ follow-up work:
   longer provides. It is a Qt-internal mismatch rather than an application
   defect, and the connect failure is harmless; confirming tray behaviour needs a
   real desktop session with a status-notifier host.
-- **Global mouse.** This is the one platform service that still resolves to the
-  unsupported stub, so anything needing pointer events outside the application's
-  own windows stays off; XInput2 would be the route. The rest are done: shortcuts
-  are grabbed through X11 (`XGrabKey`, with the Wayland guard above) or brokered
-  through the portal, the cursor is read and warped through X11, auto-start
+- **No platform service is left as a stub.** All seven have Linux bodies:
+  shortcuts are grabbed through X11 (`XGrabKey`, with the Wayland guard above) or
+  brokered through the portal, the cursor is read and warped through X11, the
+  global mouse is watched with XInput2 raw events on the root window, auto-start
   writes an XDG desktop entry, and fullscreen detection reads EWMH state.
+
+  Two of those are verified only against a stand-in. The portal paths ran against
+  the mock portal, and the pointer backend runs offscreen, where there is no X11
+  display — so it covers the failure path and the shared gesture contract rather
+  than live pointer input. A real session is what confirms either.
 - **The bundled Qt runtime ships without its own licence text.** The package
   carries the application's `COPYRIGHT` and GPL-3.0 `LICENSE`, both third-party
   notice documents, and a `COPYRIGHT`/`LICENSE` pair per repository component
