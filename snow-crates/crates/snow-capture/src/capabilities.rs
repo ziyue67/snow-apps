@@ -34,26 +34,42 @@ impl CaptureCapabilities {
                 window_enumeration: supported,
             }
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
         {
-            let supported = cfg!(windows);
             Self {
-                backends: if supported {
-                    vec![
-                        CaptureBackendKind::DxgiDuplication,
-                        CaptureBackendKind::WindowsGraphicsCapture,
-                        CaptureBackendKind::Gdi,
-                    ]
-                } else {
-                    vec![]
-                },
+                backends: vec![
+                    CaptureBackendKind::DxgiDuplication,
+                    CaptureBackendKind::WindowsGraphicsCapture,
+                    CaptureBackendKind::Gdi,
+                ],
                 desktop_space: DesktopSpace::PhysicalPixels,
-                cpu_formats: if supported {
-                    vec![PixelFormat::Rgba8, PixelFormat::Bgra8]
-                } else {
-                    vec![]
-                },
-                native_frames: supported,
+                cpu_formats: vec![PixelFormat::Rgba8, PixelFormat::Bgra8],
+                native_frames: true,
+                hdr_capture: false,
+                window_enumeration: false,
+            }
+        }
+        // X11 capture reads the root window into CPU memory, so it advertises no
+        // native frames; window capture and per-output enumeration are not
+        // implemented yet, which is why window_enumeration stays false.
+        #[cfg(target_os = "linux")]
+        {
+            Self {
+                backends: vec![CaptureBackendKind::X11],
+                desktop_space: DesktopSpace::PhysicalPixels,
+                cpu_formats: vec![PixelFormat::Bgra8],
+                native_frames: false,
+                hdr_capture: false,
+                window_enumeration: false,
+            }
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+        {
+            Self {
+                backends: vec![],
+                desktop_space: DesktopSpace::PhysicalPixels,
+                cpu_formats: vec![],
+                native_frames: false,
                 hdr_capture: false,
                 window_enumeration: false,
             }

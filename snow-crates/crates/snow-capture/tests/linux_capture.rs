@@ -9,8 +9,34 @@
 //! ```
 #![cfg(target_os = "linux")]
 
+use snow_capture::backend::CaptureBackendKind;
+use snow_capture::capabilities::CaptureCapabilities;
 use snow_capture::system::{CaptureOptions, CaptureSystem};
 use snow_capture::CaptureTarget;
+
+/// Capability discovery must not depend on a display: report the backend the
+/// platform actually provides even when no connection can be opened.
+#[test]
+fn advertises_the_x11_backend() {
+    let capabilities = CaptureCapabilities::current();
+    assert_eq!(
+        capabilities.backends,
+        vec![CaptureBackendKind::X11],
+        "Linux advertises the X11 backend"
+    );
+    assert!(
+        !capabilities.cpu_formats.is_empty(),
+        "the backend produces CPU frames, so it advertises formats"
+    );
+    assert!(
+        !capabilities.native_frames,
+        "X11 capture reads into CPU memory rather than handing over native frames"
+    );
+    assert!(
+        !capabilities.window_enumeration,
+        "window enumeration is not implemented yet"
+    );
+}
 
 fn display_available() -> bool {
     std::env::var_os("DISPLAY").is_some()

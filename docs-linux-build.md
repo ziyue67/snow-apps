@@ -212,12 +212,9 @@ follow-up work:
   and window capture do not, so `inspect_window` and `create_window_capturer`
   report an unsupported-platform error. Multi-head setups are seen as one
   monitor covering the X screen, and Wayland has no backend at all.
-  Capability reporting already
-  degrades correctly: `CaptureCapabilities::current()` takes the
-  `cfg!(windows)` branch, so Linux advertises an empty `backends` and
-  `cpu_formats` list and capture attempts return an error instead of promising
-  support, which leaves the remaining work as the backend itself rather than the
-  reporting around it.
+  `CaptureCapabilities::current()` reports the X11 backend with BGRA CPU frames
+  on Linux, and advertises neither native frames nor window enumeration, so the
+  application sees exactly what the backend provides.
 - **Tray icon warning.** Starting the packaged build prints
   `QObject::connect: No such signal QPlatformNativeInterface::systemTrayWindowChanged(QScreen*)`.
   The string lives only in Qt's own `libQt6Widgets.so.6` (three occurrences) and
