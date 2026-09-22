@@ -175,7 +175,12 @@ follow-up work:
   shared-memory `XShm`, and conversion of the returned image into the crate's
   frame format; window capture additionally needs `XComposite`. Wayland needs a
   portal/PipeWire path instead. Until then the offline preview and editing paths
-  still work, but nothing can acquire the screen.
+  still work, but nothing can acquire the screen. Capability reporting already
+  degrades correctly: `CaptureCapabilities::current()` takes the
+  `cfg!(windows)` branch, so Linux advertises an empty `backends` and
+  `cpu_formats` list and capture attempts return an error instead of promising
+  support, which leaves the remaining work as the backend itself rather than the
+  reporting around it.
 - **Tray icon warning.** Starting the packaged build prints
   `QObject::connect: No such signal QPlatformNativeInterface::systemTrayWindowChanged(QScreen*)`.
   The string lives only in Qt's own `libQt6Widgets.so.6` (three occurrences) and
