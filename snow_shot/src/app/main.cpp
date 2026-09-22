@@ -28,6 +28,7 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QString>
@@ -248,6 +249,21 @@ int main(int argc, char* argv[]) {
     // native child native, which silently turns those click-through surfaces
     // into OS-level input interceptors.
     QCoreApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
+
+#if defined(Q_OS_LINUX)
+    // The Debian package bundles Qt together with its platform plugins under
+    // <prefix>/lib/snow-shot. Qt only searches the application directory unless
+    // told otherwise, so register that plugin directory before the platform
+    // plugin is resolved during QApplication construction. The executable path
+    // comes from /proc because applicationDirPath() needs a live instance.
+    {
+        const QString selfPath = QFile::symLinkTarget(QStringLiteral("/proc/self/exe"));
+        if (!selfPath.isEmpty()) {
+            QCoreApplication::addLibraryPath(
+                QFileInfo(selfPath).absolutePath() + QStringLiteral("/../lib/snow-shot/plugins"));
+        }
+    }
+#endif
 
     QApplication app(argc, argv);
     snow_shot::diagnostics::logEvent(QStringLiteral("snow_shot.app"),

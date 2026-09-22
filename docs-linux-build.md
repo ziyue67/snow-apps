@@ -155,19 +155,16 @@ follow-up work:
 - **Qt kit completeness.** An aqt kit that omits `qtdeclarative` ships an
   `lrelease` that cannot resolve `libQt6Qml`. Install the `qtdeclarative`
   archive, or make `lrelease` resolve against a matching Qt build.
-- **The package is not relocatable to machines without Qt 6.11.1.** The install
-  runpath records both `$ORIGIN` and the absolute Qt library directory this
-  build links against. A host that only has the distribution Qt (6.10.2 on the
-  reference system) fails to load the executable with a `Qt_6.11` symbol error,
-  and the generated `Depends` (which names the distribution Qt packages) does
-  not match the version the binary actually needs. Ship the Qt runtime in the
-  package, or build against the distribution Qt with the exact-version pins
-  relaxed.
+- **Generated dependencies still name the distribution Qt.** The package bundles
+  the Qt 6.11.1 runtime, ICU and the platform plugins under `lib/snow-shot`, so
+  it loads and starts on a host that has no Qt 6.11.1 of its own. `shlibdeps`
+  still derives `Depends` from the distribution Qt packages (6.10.2 on the
+  reference system), which overstates what the bundled build needs; tighten the
+  dependency list once the supported distribution matrix is settled.
 
 ## Build configuration notes
 
 Two Linux-specific build settings are deliberate rather than incidental:
-
 - **Interprocedural optimization is off.** With `-flto` the linker emits copy
   relocations for Qt and libstdc++ data symbols (`QGuiApplication`'s
   `staticMetaObject`, typeinfo, vtables). The copied symbols make Qt bind its
@@ -181,3 +178,11 @@ Two Linux-specific build settings are deliberate rather than incidental:
   `-Wchanges-meaning`, `-Wsubobject-linkage`, `-Wclobbered` and
   `-Wnull-dereference` (the last two surface only once LTO is off, and the
   `-Wnull-dereference` hits are inside Qt and libstdc++ headers).
+- **The bundled Qt plugin directory is registered at startup.** The package
+  installs Qt and its platform plugins below `lib/snow-shot`, but Qt on its own
+  only searches `<applicationDirPath>/platforms`. `main` therefore calls
+  `QCoreApplication::addLibraryPath` with that directory before constructing
+  `QApplication`; the executable location comes from `/proc/self/exe` because
+  `applicationDirPath()` needs a live instance. Installing a `qt.conf` or a
+  `platforms/` directory into `/usr/bin` was rejected: every Qt application in
+  that directory would read it.

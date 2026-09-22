@@ -6648,19 +6648,34 @@ if(APPLE)
     set(CMAKE_INSTALL_DATADIR "snow_shot.app/Contents/Resources")
 endif()
 if(UNIX AND NOT APPLE)
-    # The installed binary must resolve the Qt modules it was compiled against
-    # and the sibling codec backend without relying on the build tree.
+    # Bundle the Qt runtime and the platform plugins this build links against.
+    # The Qt release is relocatable, so it derives its plugin directory from the
+    # library location: keeping the libraries in <libdir>/snow-shot and the
+    # plugins in <libdir>/snow-shot/plugins lets Qt find them without any
+    # absolute path from the build host. ICU is bundled too, because the Qt
+    # libraries link against the ICU build shipped with the same kit.
     get_filename_component(_snow_shot_qt_lib_dir "${Qt6_DIR}/../.." ABSOLUTE)
-    # $ORIGIN covers libraries staged next to the binary; the ../lib entry
-    # covers the codec backend installed into the library directory.
+    get_filename_component(_snow_shot_qt_prefix "${_snow_shot_qt_lib_dir}/.." ABSOLUTE)
+    file(GLOB _snow_shot_qt_runtime
+        "${_snow_shot_qt_lib_dir}/libQt6*.so.6*"
+        "${_snow_shot_qt_lib_dir}/libicu*.so*"
+    )
+    install(FILES ${_snow_shot_qt_runtime}
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/snow-shot"
+    )
+    install(DIRECTORY "${_snow_shot_qt_prefix}/plugins/platforms"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/snow-shot/plugins"
+    )
+    # $ORIGIN covers libraries staged next to the binary, ../lib covers the codec
+    # backend and ../lib/snow-shot the bundled Qt runtime.
     set_target_properties(snow_shot PROPERTIES
-        INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;${_snow_shot_qt_lib_dir}"
-        INSTALL_RPATH_USE_LINK_PATH TRUE
+        INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;$ORIGIN/../lib/snow-shot"
+        INSTALL_RPATH_USE_LINK_PATH FALSE
     )
     if(TARGET snow_ocr_process)
         set_target_properties(snow_ocr_process PROPERTIES
-            INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;${_snow_shot_qt_lib_dir}"
-            INSTALL_RPATH_USE_LINK_PATH TRUE
+            INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;$ORIGIN/../lib/snow-shot"
+            INSTALL_RPATH_USE_LINK_PATH FALSE
         )
     endif()
 endif()
