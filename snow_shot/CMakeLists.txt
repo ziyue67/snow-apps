@@ -1944,6 +1944,19 @@ if(SNOW_SHOT_BUILD_TESTS)
         target_link_libraries(snow-shot-autostart-registration-tests PRIVATE Qt6::Gui)
         add_test(NAME snow-shot-autostart-registration-tests
                  COMMAND snow-shot-autostart-registration-tests)
+
+        # The probe reaches Xlib directly, so unlike the application this target
+        # has to name X11 itself instead of inheriting it from the FFI bundle.
+        add_executable(snow-shot-focused-fullscreen-window-tests
+            tests/focused_fullscreen_window_tests.cpp
+            src/platform/focusedfullscreenwindow.cpp
+        )
+        target_include_directories(snow-shot-focused-fullscreen-window-tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        )
+        target_link_libraries(snow-shot-focused-fullscreen-window-tests PRIVATE Qt6::Gui X11)
+        add_test(NAME snow-shot-focused-fullscreen-window-tests
+                 COMMAND snow-shot-focused-fullscreen-window-tests)
     endif()
 
     if(WIN32)
