@@ -1,0 +1,104 @@
+# Builds the C++/Qt Linux port and packages it as a Debian archive.
+#
+# The prerequisites mirror docs-linux-build.md: the distribution supplies Qt's
+# native dependencies, FFmpeg, OpenCV and ONNX Runtime, while Qt itself has to be
+# 6.11.1 exactly, which is newer than the runner image ships, so aqt installs it
+# into .tools/Qt the same way a workstation would.
+name: Build Linux Debian (Qt)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "snow_shot/**"
+      - "snow-crates/**"
+      - "snow_rust_ffi/**"
+      - "cmake/**"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "scripts/package-snow-shot-linux.sh"
+      - ".github/workflows/snow-shot-linux-deb.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snow-shot-linux-deb-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-deb:
+    name: Build and package the Linux Debian archive
+    runs-on: ubuntu-24.04
+    container: ubuntu:26.04
+    env:
+      # The `ort` dependency is a Git dependency, which cargo fetches more
+      # reliably through the CLI than through its own transport.
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      # The QR models come from a pinned revision; the mirror keeps the configure
+      # step working when raw.githubusercontent.com is unreachable.
+      SNOW_SHOT_QR_MODEL_BASE_URL: https://v4.gh-proxy.org/https://raw.githubusercontent.com/WeChatCV/opencv_3rdparty/a8b69ccc738421293254aec5ddb38bd523503252
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential ninja-build cmake pkg-config git curl ca-certificates \
+            python3 python3-venv python3-pip \
+            libgl1-mesa-dev libvulkan-dev \
+            libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
+            libopencv-dev libonnxruntime-dev libminizip-ng-dev \
+            libpng-dev libjpeg-turbo8-dev libturbojpeg0-dev libwebp-dev libheif-dev \
+            libjxl-dev libgif-dev libopenexr-dev \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-sync1 libxcb-xfixes0 \
+            libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libfontconfig1 libfreetype6 \
+            libglx-mesa0 libopengl0 \
+            libx11-dev libxi-dev libdbus-1-dev libxkbcommon-dev
+
+      - name: Install the pinned Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Install Qt 6.11.1
+        run: |
+          python3 -m venv .tools/aqt-venv
+          .tools/aqt-venv/bin/pip install --upgrade pip aqtinstall
+          .tools/aqt-venv/bin/aqt install-qt linux desktop 6.11.1 linux_gcc_64 \
+            -O .tools/Qt -b https://download.qt.io \
+            --archives qtbase qtsvg qttools qttranslations icu qtwayland
+
+      # The JPEG codec uses the libjpeg-turbo 3.x handle API, so a distribution
+      # still shipping 2.x needs a 3.x build for the configure step to accept.
+      - name: Provide libjpeg-turbo 3.x
+        run: |
+          if pkg-config --atleast-version=3.0 libturbojpeg 2>/dev/null; then
+            echo "the image already ships libjpeg-turbo 3.x"
+            exit 0
+          fi
+          curl -L -o libjpeg-turbo.tar.gz \
+            https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.2/libjpeg-turbo-3.1.2.tar.gz
+          tar xzf libjpeg-turbo.tar.gz
+          cmake -S libjpeg-turbo-3.1.2 -B libjpeg-turbo-3.1.2/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DENABLE_STATIC=ON \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DWITH_TURBOJPEG=ON \
+            -DCMAKE_INSTALL_PREFIX="$PWD/.tools/libjpeg-turbo"
+          cmake --build libjpeg-turbo-3.1.2/build -j"$(nproc)"
+          cmake --install libjpeg-turbo-3.1.2/build
+
+      - name: Configure, build and package
+        run: ./scripts/package-snow-shot-linux.sh
+
+      - name: Upload the Debian archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: snow-shot-linux-deb
+          path: build/snow-shot-linux-x64-release/*.deb
+          if-no-files-found: error
