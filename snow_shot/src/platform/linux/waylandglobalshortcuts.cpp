@@ -3,6 +3,7 @@
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusMetaType>
 #include <QDBusObjectPath>
 #include <QDBusVariant>
 #include <QEventLoop>
@@ -17,6 +18,32 @@
 #include <memory>
 
 namespace snow_shot::presentation {
+
+// The portal takes `a(sa{sv})`: an array of (id, properties) structures. The
+// element type has to be declared to the marshaller, which an anonymous struct
+// streamed by hand cannot do — beginArray(StructureType) left it expecting a
+// uint32 array and aborted while writing the structure.
+struct PortalShortcut {
+    QString id;
+    QVariantMap properties;
+};
+
+QDBusArgument& operator<<(QDBusArgument& argument, const PortalShortcut& shortcut) {
+    argument.beginStructure();
+    argument << shortcut.id << shortcut.properties;
+    argument.endStructure();
+    return argument;
+}
+
+// qDBusRegisterMetaType instantiates both directions, so the reading side has to
+// exist even though this backend only ever sends the type.
+QDBusArgument& operator>>(const QDBusArgument& argument, PortalShortcut& shortcut) {
+    argument.beginStructure();
+    argument >> shortcut.id >> shortcut.properties;
+    argument.endStructure();
+    return const_cast<QDBusArgument&>(argument);
+}
+
 namespace {
 
 constexpr auto kPortalService = "org.freedesktop.portal.Desktop";
@@ -127,14 +154,17 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
 
         // One bind per registration keeps the bookkeeping simple; the portal
         // allows binding incrementally on an existing session.
+        // The declared type must be known to the marshaller; registering once is
+        // enough, and the function-local static keeps it off the hot path.
+        static const auto portalShortcutRegistered =
+            qDBusRegisterMetaType<PortalShortcut>();
+        Q_UNUSED(portalShortcutRegistered);
         QDBusArgument shortcutList;
-        shortcutList.beginArray(QDBusArgument::StructureType);
-        shortcutList.beginStructure();
-        shortcutList << shortcutIdFor(registrationId)
-                     << QVariantMap{{QStringLiteral("description"),
-                                     binding.portableText},
-                                    {QStringLiteral("trigger_description"), trigger}};
-        shortcutList.endStructure();
+        shortcutList.beginArray(qMetaTypeId<PortalShortcut>());
+        shortcutList << PortalShortcut{
+            shortcutIdFor(registrationId),
+            QVariantMap{{QStringLiteral("description"), binding.portableText},
+                        {QStringLiteral("trigger_description"), trigger}}};
         shortcutList.endArray();
 
         QDBusMessage bind = QDBusMessage::createMethodCall(
@@ -295,5 +325,7 @@ std::unique_ptr<GlobalShortcutBackend> createWaylandGlobalShortcutBackend() {
 }
 
 } // namespace snow_shot::presentation
+
+Q_DECLARE_METATYPE(snow_shot::presentation::PortalShortcut)
 
 #include "waylandglobalshortcuts.moc"

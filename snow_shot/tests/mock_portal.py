@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""A stand-in XDG Desktop Portal for the screenshot round-trip test.
+"""A stand-in XDG Desktop Portal for the screenshot and shortcut round-trips.
 
 The real portal cannot run in a headless container, so this serves the same
-interface on a private session bus and answers with a generated image. Drive it
-with the portal screenshot test:
+interfaces on a private session bus and answers with generated results. Drive it
+with the portal tests:
 
     dbus-run-session -- bash -c \
         "python3 snow_shot/tests/mock_portal.py & sleep 2; \
@@ -26,11 +26,14 @@ from gi.repository import GLib
 
 PORTAL_NAME = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
-REQUEST_PATH = PORTAL_PATH + "/request/mock/1"
 SCREENSHOT_IFACE = "org.freedesktop.portal.Screenshot"
+SHORTCUTS_IFACE = "org.freedesktop.portal.GlobalShortcuts"
 REQUEST_IFACE = "org.freedesktop.portal.Request"
+SESSION_IFACE = "org.freedesktop.portal.Session"
 
-# The image the round-trip test expects back.
+SESSION_PATH = PORTAL_PATH + "/session/mock/1"
+
+# The image the screenshot round-trip expects back.
 IMAGE_WIDTH = 1
 IMAGE_HEIGHT = 1
 
@@ -63,23 +66,76 @@ class Request(dbus.service.Object):
         pass
 
 
+class Session(dbus.service.Object):
+    """Lives at the session path, which is where activations come from."""
+
+    @dbus.service.signal(SHORTCUTS_IFACE, signature="osta{sv}")
+    def Activated(self, session_handle, shortcut_id, timestamp, options):
+        pass
+
+    @dbus.service.method(SESSION_IFACE, in_signature="", out_signature="")
+    def Close(self):
+        print("mock portal: session closed", flush=True)
+        GLib.idle_add(lambda: (print("mock portal: exiting", flush=True), sys.exit(0)))
+
+
 class Portal(dbus.service.Object):
     def __init__(self, connection, image_path):
         super().__init__(connection, PORTAL_PATH)
         self._connection = connection
         self._image_path = image_path
+        # The client subscribes to whatever request path the method returned, so
+        # each call gets its own and the answer cannot land on the wrong one.
+        self._requests = 0
+
+    def _next_request_path(self):
+        self._requests += 1
+        return "%s/request/mock/%d" % (PORTAL_PATH, self._requests)
+
+    def _answer(self, request_path, results, response=0):
+        Request(self._connection, request_path).Response(
+            dbus.UInt32(response), results
+        )
+        print("mock portal: answering %s" % request_path, flush=True)
+        return False
 
     @dbus.service.method(SCREENSHOT_IFACE, in_signature="sa{sv}", out_signature="o")
     def Screenshot(self, parent_window, options):
         # The result never comes back as the method reply; the caller is told to
         # watch the request object instead.
-        GLib.timeout_add(150, self._reply)
-        return dbus.ObjectPath(REQUEST_PATH)
-
-    def _reply(self):
+        request_path = self._next_request_path()
         uri = "file://%s" % self._image_path
-        Request(self._connection, REQUEST_PATH).Response(dbus.UInt32(0), {"uri": uri})
-        print("mock portal: replied with %s" % uri, flush=True)
+        GLib.timeout_add(150, lambda: self._answer(request_path, {"uri": uri}))
+        return dbus.ObjectPath(request_path)
+
+    @dbus.service.method(SHORTCUTS_IFACE, in_signature="a{sv}", out_signature="o")
+    def CreateSession(self, options):
+        request_path = self._next_request_path()
+        GLib.timeout_add(
+            150,
+            lambda: self._answer(
+                request_path, {"session_handle": dbus.String(SESSION_PATH)}
+            ),
+        )
+        return dbus.ObjectPath(request_path)
+
+    @dbus.service.method(SHORTCUTS_IFACE, in_signature="oa(sa{sv})sa{sv}", out_signature="o")
+    def BindShortcuts(self, session_handle, shortcuts, parent_window, options):
+        request_path = self._next_request_path()
+        bound = [str(entry[0]) for entry in shortcuts]
+        print("mock portal: binding %s" % bound, flush=True)
+        GLib.timeout_add(150, lambda: self._answer(request_path, {"shortcuts": shortcuts}))
+        # Fire the first bound shortcut shortly after the bind is acknowledged, so
+        # the caller has already attached its activation handler.
+        if bound:
+            GLib.timeout_add(400, lambda: self._activate(bound[0]))
+        return dbus.ObjectPath(request_path)
+
+    def _activate(self, shortcut_id):
+        Session(self._connection, SESSION_PATH).Activated(
+            dbus.ObjectPath(SESSION_PATH), shortcut_id, dbus.UInt64(0), {}
+        )
+        print("mock portal: activated %s" % shortcut_id, flush=True)
         return False
 
 

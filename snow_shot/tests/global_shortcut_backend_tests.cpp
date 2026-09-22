@@ -17,7 +17,9 @@
 
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QEventLoop>
 #include <QString>
+#include <QTimer>
 
 #include <cstdio>
 #include <memory>
@@ -35,6 +37,44 @@ void require(bool condition, const char* message) {
 using snow_shot::presentation::GlobalShortcutBackend;
 using snow_shot::presentation::GlobalShortcutFailureReason;
 using snow_shot::shortcuts::ShortcutBinding;
+
+// With a mock portal on the session bus the whole exchange runs for real: the
+// session is created, the shortcut is bound, and the activation comes back with
+// the id it was registered under. This is opt-in because it needs that mock.
+void portalRoundTrip() {
+    if (!qEnvironmentVariableIsSet("SNOW_SHOT_TEST_PORTAL")) {
+        std::fprintf(stderr, "skipping the portal round-trip: no mock portal is running\n");
+        return;
+    }
+    qputenv("WAYLAND_DISPLAY", "wayland-0");
+    const std::unique_ptr<GlobalShortcutBackend> backend =
+        snow_shot::presentation::createPlatformGlobalShortcutBackend();
+
+    int activated = -1;
+    backend->setActivationHandler([&activated](int registrationId) { activated = registrationId; });
+
+    const ShortcutBinding binding(QStringLiteral("Ctrl+Shift+A"));
+    const auto registered = backend->registerShortcut(1, binding);
+    require(registered.registered, "the portal must accept a bound shortcut");
+
+    // The activation arrives on the event loop, so pump it until it lands.
+    QEventLoop loop;
+    QTimer watchdog;
+    watchdog.setSingleShot(true);
+    QObject::connect(&watchdog, &QTimer::timeout, &loop, &QEventLoop::quit);
+    watchdog.start(5000);
+    QTimer poll;
+    QObject::connect(&poll, &QTimer::timeout, [&activated, &loop] {
+        if (activated >= 0) {
+            loop.quit();
+        }
+    });
+    poll.start(50);
+    loop.exec();
+
+    require(activated == 1, "the activation must carry the registration id it was bound with");
+    qunsetenv("WAYLAND_DISPLAY");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -67,6 +107,8 @@ int main(int argc, char** argv) {
         require(registered.failureReason == GlobalShortcutFailureReason::UnsupportedPlatform,
                 "a refused registration must name the platform");
     }
+
+    portalRoundTrip();
 
     if (saved.isEmpty()) {
         qunsetenv("WAYLAND_DISPLAY");
