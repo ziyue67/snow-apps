@@ -293,7 +293,7 @@ const TranslatorCore: React.FC<{
         setSupportedTranslationTypesLoading(true);
         getTranslationTypes().then((res) => {
             setSupportedTranslationTypesLoading(false);
-            if (!res.success()) {
+            if (res.response?.status !== 200 || res.code !== 0) {
                 return;
             }
 
