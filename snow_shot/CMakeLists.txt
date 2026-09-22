@@ -6446,6 +6446,13 @@ unset(_SNOW_SHOT_SAVED_PKG_CONFIG_PATH)
     # Canvas-only consumers also reach recording symbols in the bundled archive.
     if(TARGET snow_shot_rust_ffi_bundle)
         target_link_libraries(snow_shot_rust_ffi_bundle INTERFACE PkgConfig::SNOW_SHOT_FFMPEG)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            # The Rust capture backend binds Xlib directly. A static archive only
+            # records that requirement, so it has to be satisfied by the final
+            # link; naming it on the interface target keeps CMake placing -lX11
+            # after the archive instead of before it, where it would not resolve.
+            target_link_libraries(snow_shot_rust_ffi_bundle INTERFACE X11)
+        endif()
     endif()
     target_link_libraries(snow_shot PRIVATE PkgConfig::SNOW_SHOT_FFMPEG)
     if(TARGET snow-shot-screen-recording-controller-tests)

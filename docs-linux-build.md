@@ -165,29 +165,42 @@ sudo apt-get install --dry-run --reinstall --no-install-recommends ./build/snow-
 desktop-file-validate /usr/share/applications/com.snowshot.snow_shot.desktop
 ```
 
-## Linux capture backend plan
+## Linux capture backend
 
-The pieces below were checked against the workspace, so an implementation can
-start without repeating the reconnaissance:
+`src/platform/linux.rs` implements screen capture over X11, and
+`src/platform/mod.rs` selects it under `cfg(target_os = "linux")`. The design
+points, all verified against the workspace:
 
-- Bind Xlib directly instead of adding a crate. `libX11.so` is present with its
-  development symlink, so `#[link(name = "X11")] extern "C"` declarations cover
-  the handful of calls needed; no new dependency and no registry fetch.
+- Xlib is bound directly rather than through a crate. `libX11.so` is present
+  with its development symlink, so a `#[link(name = "X11")] unsafe extern "C"`
+  block covers the handful of calls needed: no new dependency, no registry
+  fetch.
 - `Frame::from_bgra8(width, height, data)` matches what `XGetImage` returns for
-  a 32-bit TrueColor `ZPixmap`, so the captured buffer needs no channel swizzle.
-- `MonitorId`'s fields (`key`, `handle`, `name`, `is_primary`) are `pub(crate)`,
-  so a backend inside the crate constructs them directly; `handle` can carry the
-  RandR output id or the screen number.
-- `MonitorCapturer` only requires `capture`; the cancellation token, cursor
-  visibility, colour transform, backend-kind and prewarm hooks all default.
+  a 32-bit TrueColor `ZPixmap` (each pixel is `0x00RRGGBB`, which reads back as
+  BGRA on a little-endian host), so the captured buffer needs no swizzle. Rows
+  are copied with the `bytes_per_line` stride before `XDestroyImage` releases
+  the server buffer.
+- `XInitThreads` runs once through a `Once`, because capture happens on worker
+  threads and Xlib is not thread-safe before that call.
 
-Suggested order: add `platform/linux.rs` with an `X11Backend` implementing the
-six `CaptureBackend` methods and an `X11MonitorCapturer` whose `capture` reads
-the root window region through `XGetImage` and returns `Frame::from_bgra8`;
-select it in `platform/mod.rs` under `cfg(target_os = "linux")`; enumerate
-monitors with RandR and fall back to the root window as a single monitor when
-RandR is unavailable. Verify with a virtual display that has known content, so
-the captured pixels can be asserted rather than merely observed.
+`CaptureBackendKind` gained an `X11` variant, and the C ABI carries it as
+`SNOW_CAPTURE_BACKEND_X11 = 5` in `snow_capture.h` alongside the matching
+`parse_capture_backend`/`capture_backend_value` arms.
+
+Linking needs care on Linux: a static archive only records that it needs Xlib,
+so the final link has to name it. It is attached to the
+`snow_shot_rust_ffi_bundle` interface target rather than to `snow_shot`
+directly, because linking happens left to right and `-lX11` placed before the
+archive resolves nothing.
+
+`tests/linux_capture.rs` covers enumeration, layout and a real captured frame;
+the tests skip when `DISPLAY` is unset and assert exact geometry under
+`xvfb-run -a -s "-screen 0 320x240x24"`. `scripts/verify-snow-shot-linux.sh`
+runs them, so a capture regression fails verification.
+
+Still open: per-output enumeration through RandR (the X screen is currently
+reported as one monitor spanning the whole screen), window capture through
+XComposite, and a Wayland portal/PipeWire path.
 
 ## Known limitations
 
@@ -195,22 +208,11 @@ The Linux port currently covers the build system, the platform shims and the
 packaging path. The following behaviour is not implemented yet and is tracked as
 follow-up work:
 
-- **Screen capture.** `snow-capture` has no Linux backend yet; the desktop
-  capture entry points report the platform as unsupported. `src/platform/mod.rs`
-  currently answers every non-Windows, non-macOS request with an
-  `UnsupportedBackend`. A Linux backend has to provide the `CaptureBackend`
-  surface (`enumerate_monitors`, `primary_monitor`, `monitor_layout`,
-  `inspect_window`, `create_monitor_capturer`, `create_window_capturer`), a
-  `MonitorCapturer` implementation, and `monitor_layout_from_monitors`. Only
-  `MonitorCapturer::capture` has to be written: `set_cancellation`,
-  `set_cursor_visible`, `set_screen_color_transform`, `backend_kind` and
-  `prewarm_environment` all have default implementations, and `prewarm_environment`
-  must not leave a capture session open when it returns. On X11
-  that means monitor enumeration through RandR, capture through `XGetImage` or
-  shared-memory `XShm`, and conversion of the returned image into the crate's
-  frame format; window capture additionally needs `XComposite`. Wayland needs a
-  portal/PipeWire path instead. Until then the offline preview and editing paths
-  still work, but nothing can acquire the screen. Capability reporting already
+- **Screen capture scope.** Whole-screen capture works; per-monitor enumeration
+  and window capture do not, so `inspect_window` and `create_window_capturer`
+  report an unsupported-platform error. Multi-head setups are seen as one
+  monitor covering the X screen, and Wayland has no backend at all.
+  Capability reporting already
   degrades correctly: `CaptureCapabilities::current()` takes the
   `cfg!(windows)` branch, so Linux advertises an empty `backends` and
   `cpu_formats` list and capture attempts return an error instead of promising

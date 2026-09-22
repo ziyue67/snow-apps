@@ -55,6 +55,8 @@ pub enum CaptureBackendKind {
     Gdi,
 
     ScreenCaptureKit,
+
+    X11,
 }
 
 impl CaptureBackendKind {
@@ -65,6 +67,7 @@ impl CaptureBackendKind {
             Self::WindowsGraphicsCapture => "wgc",
             Self::Gdi => "gdi",
             Self::ScreenCaptureKit => "sck",
+            Self::X11 => "x11",
         }
     }
 }

@@ -103,7 +103,19 @@ grep -qF 'Storage initialized' "$snow_run_log" ||
     snow_fail "the application started but never reported storage initialization"
 snow_ok "the packaged application starts on the $snow_platform platform $snow_display_note"
 
-# 6. A missing capture backend is a known gap, not a regression: report it so
-#    the result is not mistaken for a working screen capture.
-printf 'verify: note - screen capture is reported unsupported on Linux; see docs-linux-build.md\n'
+# 6. Exercise the X11 capture backend on a display with known geometry, so a
+#    regression in screen capture fails the verification instead of passing
+#    unnoticed behind the packaging checks.
+if [[ -d "$snow_repo_root/snow-crates" ]] && command -v xvfb-run >/dev/null 2>&1; then
+    (
+        cd "$snow_repo_root/snow-crates"
+        timeout 900 xvfb-run -a -s "-screen 0 320x240x24" \
+            cargo test -p snow-capture --test linux_capture
+    ) >"$snow_repo_root/build/verify-capture.log" 2>&1 ||
+        snow_fail "the X11 capture backend failed, see build/verify-capture.log"
+    snow_ok "the X11 capture backend captures a frame on a virtual display"
+else
+    printf 'verify: note - skipped the capture backend check (needs snow-crates and xvfb)\n'
+fi
+
 printf 'verify: all checks passed\n'
