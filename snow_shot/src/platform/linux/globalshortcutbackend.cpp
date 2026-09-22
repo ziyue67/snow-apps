@@ -41,6 +41,13 @@ constexpr unsigned int kIgnorableCombinations[] = {
     LockMask | Mod2Mask,
 };
 
+// XGrabKey only reaches XWayland: a native Wayland client never routes its keys
+// through X, so a grab would appear to register and then never fire. The portal's
+// GlobalShortcuts interface is the sanctioned path and is not wired up yet.
+bool x11GrabsAreEffective() {
+    return qgetenv("WAYLAND_DISPLAY").isEmpty();
+}
+
 unsigned int x11ModifierMask(Qt::KeyboardModifiers modifiers) {
     unsigned int mask = 0;
     if (modifiers & Qt::ShiftModifier) {
@@ -239,6 +246,11 @@ class LinuxGlobalShortcutBackend final : public QObject, public GlobalShortcutBa
         GlobalShortcutValidationResult result;
         result.shortcut = binding.portableText;
         result.binding = binding;
+        if (!x11GrabsAreEffective()) {
+            result.supported = false;
+            result.failureReason = GlobalShortcutFailureReason::UnsupportedPlatform;
+            return result;
+        }
 
         const ParsedShortcut parsed = parse(binding.portableText);
         if (parsed.valid) {
@@ -257,6 +269,10 @@ class LinuxGlobalShortcutBackend final : public QObject, public GlobalShortcutBa
     GlobalShortcutBackendResult registerShortcut(int registrationId,
                                                  const shortcuts::ShortcutBinding& binding) override {
         GlobalShortcutBackendResult result;
+        if (!x11GrabsAreEffective()) {
+            result.failureReason = GlobalShortcutFailureReason::UnsupportedPlatform;
+            return result;
+        }
         if (m_display == nullptr) {
             result.failureReason = GlobalShortcutFailureReason::UnsupportedPlatform;
             return result;

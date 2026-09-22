@@ -1911,6 +1911,21 @@ if(SNOW_SHOT_BUILD_TESTS)
         target_link_libraries(snow-shot-portal-screenshot-tests PRIVATE Qt6::Gui Qt6::DBus)
         add_test(NAME snow-shot-portal-screenshot-tests
                  COMMAND snow-shot-portal-screenshot-tests)
+
+        # The X11 backend must not claim shortcuts work on a Wayland session,
+        # where its grabs only reach XWayland clients.
+        add_executable(snow-shot-global-shortcut-backend-tests
+            tests/global_shortcut_backend_tests.cpp
+            src/presentation/services/globalshortcutbackend.cpp
+            src/presentation/services/globalshortcutbackend_p.h
+            src/platform/linux/globalshortcutbackend.cpp
+        )
+        target_include_directories(snow-shot-global-shortcut-backend-tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        )
+        target_link_libraries(snow-shot-global-shortcut-backend-tests PRIVATE Qt6::Gui X11)
+        add_test(NAME snow-shot-global-shortcut-backend-tests
+                 COMMAND snow-shot-global-shortcut-backend-tests)
     endif()
 
     if(WIN32)
