@@ -208,7 +208,9 @@ bool ScreenshotCaptureWorker::ensureSession() {
     SnowCaptureDesktopSessionConfig config{};
     config.capture_retry_count = 1;
     config.capture_backend = backend;
-#if defined(Q_OS_WIN) || defined(_WIN32)
+#if defined(Q_OS_WIN) || defined(_WIN32) || defined(Q_OS_LINUX)
+    // The Windows and X11 backends both hand back BGRA frames; macOS keeps the
+    // default so the ScreenCaptureKit path is unchanged.
     config.pixel_format = SNOW_CAPTURE_PIXEL_FORMAT_BGRA8;
 #endif
     m_session = snow_capture_desktop_session_create(&config);

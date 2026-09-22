@@ -11,6 +11,7 @@
 
 use snow_capture::backend::CaptureBackendKind;
 use snow_capture::capabilities::CaptureCapabilities;
+use snow_capture::frame::CapturePixelFormat;
 use snow_capture::system::{CaptureOptions, CaptureSystem};
 use snow_capture::CaptureTarget;
 
@@ -84,10 +85,45 @@ fn captures_a_frame_matching_the_screen_geometry() {
     assert_eq!(layout.virtual_width, 320, "virtual width matches the screen");
     assert_eq!(layout.virtual_height, 240, "virtual height matches the screen");
 
+    // X11 hands back BGRA, and the backend rejects any other request, so the
+    // session has to ask for the format the backend produces.
+    let options = CaptureOptions {
+        output_pixel_format: CapturePixelFormat::Bgra8,
+        ..CaptureOptions::default()
+    };
     let mut session = system
-        .open_session(CaptureTarget::PrimaryMonitor, CaptureOptions::default())
+        .open_session(CaptureTarget::PrimaryMonitor, options)
         .expect("session opens");
     let frame = session.capture_once().expect("capture succeeds");
     assert_eq!(frame.width(), layout.virtual_width);
     assert_eq!(frame.height(), layout.virtual_height);
+    assert_eq!(
+        frame.pixel_format(),
+        CapturePixelFormat::Bgra8,
+        "the frame reports the requested layout"
+    );
+}
+
+/// Asking for a layout the backend cannot produce must fail loudly rather than
+/// hand back bytes in a different order.
+#[test]
+fn rejects_an_unsupported_pixel_format() {
+    if !display_available() {
+        eprintln!("skipping: DISPLAY is not set");
+        return;
+    }
+    let system = CaptureSystem::builder().build().expect("system builds");
+    let options = CaptureOptions {
+        output_pixel_format: CapturePixelFormat::Rgba8,
+        ..CaptureOptions::default()
+    };
+    // The capturer is created lazily and the format is negotiated then, so the
+    // rejection surfaces on the first capture rather than at session open.
+    let mut session = system
+        .open_session(CaptureTarget::PrimaryMonitor, options)
+        .expect("session opens");
+    assert!(
+        session.capture_once().is_err(),
+        "capturing after an unsupported format request must fail"
+    );
 }

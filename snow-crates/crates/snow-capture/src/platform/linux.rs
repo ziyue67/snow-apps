@@ -14,11 +14,13 @@
 use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
 use std::ptr;
 use std::sync::Once;
+use std::thread;
+use std::time::Duration;
 
 use crate::backend::{CaptureBackend, CaptureBackendKind, MonitorCapturer};
 use crate::capture_session::CaptureTargetInfo;
 use crate::error::{CaptureError, CaptureResult};
-use crate::frame::Frame;
+use crate::frame::{CapturePixelFormat, Frame};
 use crate::monitor::MonitorId;
 use crate::region::{MonitorGeometry, MonitorLayout};
 use crate::window::WindowId;
@@ -90,10 +92,27 @@ impl Display {
         INIT.call_once(|| unsafe {
             XInitThreads();
         });
-        let display = unsafe { XOpenDisplay(ptr::null()) };
+
+        // Opening a display can fail while the server is still starting, and
+        // several threads connect at once on the first captures. Retry briefly
+        // so a transient refusal does not turn into a failed capture; a display
+        // that is genuinely absent still reports an error once the attempts run
+        // out.
+        const ATTEMPTS: u32 = 5;
+        const RETRY_DELAY: Duration = Duration::from_millis(20);
+        let mut display = ptr::null_mut();
+        for attempt in 0..ATTEMPTS {
+            display = unsafe { XOpenDisplay(ptr::null()) };
+            if !display.is_null() {
+                break;
+            }
+            if attempt + 1 < ATTEMPTS {
+                thread::sleep(RETRY_DELAY);
+            }
+        }
         if display.is_null() {
             return Err(CaptureError::platform(anyhow::anyhow!(
-                "could not open an X display; is DISPLAY set?"
+                "could not open an X display after {ATTEMPTS} attempts; is DISPLAY set?"
             )));
         }
         Ok(Self(display))
@@ -254,6 +273,19 @@ struct X11MonitorCapturer;
 impl MonitorCapturer for X11MonitorCapturer {
     fn backend_kind(&self) -> CaptureBackendKind {
         CaptureBackendKind::X11
+    }
+
+    /// X11 hands back a 32-bit `ZPixmap`, which is BGRA in memory. Reject any
+    /// other request rather than accepting it silently: the default trait
+    /// implementation succeeds without doing anything, which would leave the
+    /// session treating BGRA bytes as RGBA and swapping red with blue.
+    fn set_output_pixel_format(&mut self, format: CapturePixelFormat) -> CaptureResult<()> {
+        match format {
+            CapturePixelFormat::Bgra8 => Ok(()),
+            CapturePixelFormat::Rgba8 => Err(CaptureError::platform(anyhow::anyhow!(
+                "the X11 capture backend produces BGRA frames only"
+            ))),
+        }
     }
 
     fn capture(&mut self, _reuse: Option<Frame>) -> CaptureResult<Frame> {
