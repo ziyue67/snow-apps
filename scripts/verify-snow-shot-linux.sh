@@ -78,7 +78,9 @@ if command -v xvfb-run >/dev/null 2>&1; then
     snow_launcher=(xvfb-run -a)
     snow_display_note="under a virtual X display"
 else
-    snow_launcher=()
+    # Keep the array non-empty: expanding an empty array under `set -u` fails on
+    # bash older than 4.4.
+    snow_launcher=(env)
     snow_display_note="offscreen (install xvfb to exercise the X11 path)"
 fi
 
