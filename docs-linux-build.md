@@ -156,6 +156,13 @@ ldd /usr/lib/snow-shot/plugins/platforms/libqxcb.so | grep -c 'not found'
 
 # The application starts on the real display path.
 xvfb-run -a /usr/bin/snow_shot
+
+# The generated dependencies resolve. Use --reinstall, otherwise apt short
+# circuits as soon as the package is already installed and never solves them.
+sudo apt-get install --dry-run --reinstall --no-install-recommends ./build/snow-shot-linux-x64-release/*.deb
+
+# The desktop entry is valid and its icon and command resolve.
+desktop-file-validate /usr/share/applications/com.snowshot.snow_shot.desktop
 ```
 
 ## Known limitations
