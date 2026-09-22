@@ -202,6 +202,50 @@ Still open: per-output enumeration through RandR (the X screen is currently
 reported as one monitor spanning the whole screen), window capture through
 XComposite, and a Wayland portal/PipeWire path.
 
+## Linux global shortcuts
+
+`src/platform/linux/globalshortcutbackend.cpp` implements the backend over X11
+and `createPlatformGlobalShortcutBackend()` selects it under `Q_OS_LINUX`.
+Before that, hotkeys fell through to `UnsupportedGlobalShortcutBackend` on every
+platform that is not Windows or macOS and were registered against a no-op, so
+they failed silently.
+
+The backend satisfies the four methods of `GlobalShortcutBackend`:
+
+```cpp
+using ActivationHandler = std::function<void(int)>;
+virtual void setActivationHandler(ActivationHandler handler) = 0;
+[[nodiscard]] virtual GlobalShortcutValidationResult
+validateShortcut(const snow_shot::shortcuts::ShortcutBinding& binding) const = 0;
+[[nodiscard]] virtual GlobalShortcutBackendResult
+registerShortcut(int registrationId, const snow_shot::shortcuts::ShortcutBinding& binding) = 0;
+virtual void unregisterShortcut(int registrationId) = 0;
+```
+
+The data it works with:
+
+- `ShortcutBinding { QString portableText; QMap<ShortcutPlatform, quint32> physicalKeys; }`.
+  `ShortcutPlatform` currently only has `MacOS`, so Linux should parse
+  `portableText` with `QKeySequence::fromString` rather than expect a
+  pre-computed native key.
+- `GlobalShortcutBackendResult { bool registered; GlobalShortcutFailureReason failureReason;
+  qint64 nativeErrorCode; }` and
+  `GlobalShortcutValidationResult { QString shortcut; bool supported;
+  GlobalShortcutFailureReason failureReason; ShortcutBinding binding; }`.
+
+Suggested approach, mirroring how the capture backend avoids depending on Qt's
+private X connection: open a dedicated display on a worker thread, translate the
+key sequence to a keysym and keycode (`XKeysymToKeycode`), map Qt's modifiers to
+`ControlMask`, `ShiftMask`, `Mod1Mask` (Alt) and `Mod4Mask` (Meta), and grab on
+the root window with `XGrabKey`. Grab the NumLock and CapsLock permutations as
+well, or the shortcut stops firing while either lock is active. Then loop on
+`XNextEvent`, match `KeyPress` by keycode and state, and hand the registration id
+back to the caller: the handler must reach the main thread (a `QObject` context
+with a queued invocation) because the manager updates UI in response.
+
+Wayland has no equivalent of `XGrabKey`; a Wayland session needs the desktop
+portal's global shortcuts interface instead, which the compositor may refuse.
+
 ## Known limitations
 
 The Linux port currently covers the build system, the platform shims and the

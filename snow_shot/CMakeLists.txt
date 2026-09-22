@@ -1323,7 +1323,10 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # The Windows implementation of the capture-exclusion API is compiled away
     # on Linux, so the X11/Wayland behaviour of the same contract lives here.
+    # Global shortcuts likewise have no cross-platform implementation: the X11
+    # backend grabs keys on the root window.
     list(APPEND PROJECT_CXX_SOURCES
+        src/platform/linux/globalshortcutbackend.cpp
         src/platform/linux/windowcaptureexclusion.cpp)
 endif()
 
