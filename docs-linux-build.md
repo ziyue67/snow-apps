@@ -125,13 +125,37 @@ ldd /usr/bin/snow_shot
 
 ## Verification
 
-```bash
-# The application starts; run it against the offscreen platform on machines
-# without a display.
-QT_QPA_PLATFORM=offscreen /usr/bin/snow_shot --help 2>&1 | head -20
+`scripts/verify-snow-shot-linux.sh` runs the whole chain and fails on the first
+problem. It configures and builds through the packaging entry point, inspects
+the archive, checks that the executable, the codec backend, the bundled Qt
+runtime and the platform plugins are all present, confirms every dependency
+resolves with the build host Qt removed from the picture, and finally starts
+the packaged application on the real X11 path under a virtual display. Run it
+after changing the build system, the packaging rules or the startup path:
 
-# Nothing in the package is missing a shared library.
+```bash
+scripts/verify-snow-shot-linux.sh
+# verify: ok - release preset configured, built and packaged
+# verify: ok - archive metadata parses (snow-shot_1.0.9-beta_amd64.deb, … bytes)
+# verify: ok - layout carries the executable, codec backend, … Qt libraries and … platform plugins
+# verify: ok - the packaged dependencies resolve without the build host Qt
+# verify: ok - the packaged application starts on the xcb platform under a virtual X display
+# verify: note - screen capture is reported unsupported on Linux; see docs-linux-build.md
+# verify: all checks passed
+```
+
+It uses the `xcb` plugin rather than `offscreen`, because offscreen hides
+platform and plugin failures; install `xvfb` for that step. Without it the run
+falls back to offscreen and says so instead of reporting the display path as
+proven. Individual checks:
+
+```bash
+# Nothing in the package is missing a shared library, including the plugins.
 ldd /usr/bin/snow_shot | grep -c 'not found'
+ldd /usr/lib/snow-shot/plugins/platforms/libqxcb.so | grep -c 'not found'
+
+# The application starts on the real display path.
+xvfb-run -a /usr/bin/snow_shot
 ```
 
 ## Known limitations
