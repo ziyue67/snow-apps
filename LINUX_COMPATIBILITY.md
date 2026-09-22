@@ -10,10 +10,10 @@ compatibility is maintained here as a downstream port.
 | --- | --- | --- |
 | Application startup and settings UI | Verified on earlier package | Tauri/WebKit UI starts on Ubuntu 26.04. |
 | Tray menu | Verified on earlier package | Uses libayatana-appindicator. |
-| Screenshot selection UI | Patched, runtime verification pending | X11/XWayland and GNOME portal capture paths are patched. |
+| Screenshot selection UI | Verified on Ubuntu 26.04 | GNOME Wayland screenshot capture showed real screen content instead of a blank image. |
 | OCR | Packaged, runtime verification pending | ONNX Runtime 1.20.0 is bundled in the deb and linked at install time. |
 | Primary-selection text capture | Implemented, runtime verification pending | Uses `wl-paste` or `xclip`, then falls back to the Rust helper. |
-| Translation and AI chat UI | Source-audited | These are web/API features and are not Windows-specific; API configuration is required. |
+| Translation and AI chat UI | Translation UI verified; provider fallback added | The page loads on Linux and the default Youdao provider now uses the working public endpoint. |
 | Global hotkeys | Partial | Works on X11; GNOME Wayland may reject global shortcut registration. |
 | Focused-window capture | Partial | Uses X11 active-window lookup and xcap window capture; native Wayland windows may fall back to monitor capture. |
 | Always-on-top | Partial | Uses `wmctrl` on X11; native Wayland support depends on the compositor. |
@@ -39,3 +39,10 @@ The Debian package declares the following Linux integration packages:
 The GitHub Actions workflow builds the deb, verifies the bundled ONNX Runtime,
 checks the generated `postinst`/`prerm` scripts, and runs `ldd` against the
 packaged binary before publishing the release.
+
+Manual verification performed on Ubuntu 26.04:
+
+- Installed the generated deb and confirmed `ldd /usr/bin/app` has no missing libraries.
+- Triggered screenshot capture from the tray menu; the selection window displayed the real desktop content.
+- Opened the Translation page and confirmed the source/target/service controls render correctly.
+- Verified the fallback Youdao endpoint returns a translated result for `hello`.
