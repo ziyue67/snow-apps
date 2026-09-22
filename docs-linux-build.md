@@ -141,7 +141,17 @@ packaging path. The following behaviour is not implemented yet and is tracked as
 follow-up work:
 
 - **Screen capture.** `snow-capture` has no Linux backend yet; the desktop
-  capture entry points report the platform as unsupported.
+  capture entry points report the platform as unsupported. `src/platform/mod.rs`
+  currently answers every non-Windows, non-macOS request with an
+  `UnsupportedBackend`. A Linux backend has to provide the `CaptureBackend`
+  surface (`enumerate_monitors`, `primary_monitor`, `monitor_layout`,
+  `inspect_window`, `create_monitor_capturer`, `create_window_capturer`), a
+  `MonitorCapturer` implementation, and `monitor_layout_from_monitors`. On X11
+  that means monitor enumeration through RandR, capture through `XGetImage` or
+  shared-memory `XShm`, and conversion of the returned image into the crate's
+  frame format; window capture additionally needs `XComposite`. Wayland needs a
+  portal/PipeWire path instead. Until then the offline preview and editing paths
+  still work, but nothing can acquire the screen.
 - **Global shortcuts, global mouse, XDG auto-start, physical cursor and
   focused-fullscreen detection.** These platform services still resolve to the
   unsupported stubs, so the corresponding features stay off.
