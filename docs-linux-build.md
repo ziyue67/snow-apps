@@ -245,15 +245,38 @@ with a queued invocation) because the manager updates UI in response.
 
 Wayland has no equivalent of `XGrabKey`: a grab lands on the XWayland root, so
 registration reports success while the shortcut only fires when an X11 client
-holds focus. The backend therefore reports `UnsupportedPlatform` for validation
-and registration whenever `WAYLAND_DISPLAY` is set, and
-`tests/global_shortcut_backend_tests.cpp` pins that down without needing a
-display. The real fix is the desktop portal's `GlobalShortcuts` interface —
-`CreateSession`, then `BindShortcuts`, then the session's `Activated` signal —
-which the compositor may refuse. Note that a container's portal exposes neither
-`GlobalShortcuts` nor `Screenshot`, because it only publishes interfaces that
-have a working backend and none can start without a desktop session, so that
-path has to be verified against a mock.
+holds focus. `src/platform/linux/waylandglobalshortcuts.cpp` goes through the
+desktop portal instead — `CreateSession`, then `BindShortcuts`, then the
+session's `Activated` signal, marshalled back to the main thread because the
+manager updates the UI in response — and `createPlatformGlobalShortcutBackend()`
+selects it whenever `WAYLAND_DISPLAY` is set. The compositor may refuse the
+request, and the portal has no unbind, so unregistering only drops the local
+mapping.
+
+Two details are load-bearing. The `a(sa{sv})` argument needs a declared type
+registered through `qDBusRegisterMetaType`; streaming the array by hand left
+libdbus expecting `au` and aborting mid-message. And `Q_DECLARE_METATYPE` has to
+precede the first `qMetaTypeId<>` use, or the release preset rejects the late
+specialisation — the debug preset happened to instantiate in the other order and
+built anyway, which is why that one is worth knowing.
+
+Verifying it needs a portal, so `tests/mock_portal.py` serves `GlobalShortcuts`
+alongside `Screenshot` on a private bus, and an opt-in check in
+`tests/global_shortcut_backend_tests.cpp` binds a shortcut and asserts the
+activation arrives with its registration id:
+
+```bash
+cmake --build --preset build-snow-shot-linux-x64-debug \
+    --target snow-shot-global-shortcut-backend-tests
+dbus-run-session -- bash -c \
+    "python3 snow_shot/tests/mock_portal.py & sleep 2; \
+     SNOW_SHOT_TEST_PORTAL=1 \
+     ./build/snow-shot-linux-x64-debug/snow_shot/test-bin/snow-shot-global-shortcut-backend-tests"
+```
+
+Without the mock the same binary still checks that an X11 session accepts an
+ordinary shortcut and that the X11 backend refuses one on a Wayland session;
+neither check needs a display.
 
 ## Wayland capture
 
