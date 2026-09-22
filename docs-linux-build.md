@@ -347,9 +347,11 @@ follow-up work:
   longer provides. It is a Qt-internal mismatch rather than an application
   defect, and the connect failure is harmless; confirming tray behaviour needs a
   real desktop session with a status-notifier host.
-- **Global shortcuts, global mouse, XDG auto-start, physical cursor and
-  focused-fullscreen detection.** These platform services still resolve to the
-  unsupported stubs, so the corresponding features stay off.
+- **Global mouse, XDG auto-start and focused-fullscreen detection.** These
+  platform services still resolve to the unsupported stubs, so the corresponding
+  features stay off. Global shortcuts and the physical cursor no longer do:
+  shortcuts are grabbed through X11 (`XGrabKey`, with the Wayland guard above)
+  or brokered through the portal, and the cursor is read and warped through X11.
 - **Auto-update.** The release contract is Windows-only; the updater is not
   built for Linux.
 - **Asset location.** The install rules put `assets/` and `audios/` below
