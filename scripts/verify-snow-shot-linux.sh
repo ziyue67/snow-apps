@@ -118,4 +118,37 @@ else
     printf 'verify: note - skipped the capture backend check (needs snow-crates and xvfb)\n'
 fi
 
+# 7. The portal paths cannot reach a real desktop here, but their D-Bus exchange
+#    can: a mock portal serves the same interfaces on a private bus. Tests are
+#    only built by the debug preset, so this runs when that build is present and
+#    says why it skipped otherwise.
+snow_portal_bin="$snow_repo_root/build/snow-shot-linux-x64-debug/snow_shot/test-bin"
+if [[ -x "$snow_portal_bin/snow-shot-portal-screenshot-tests" &&
+    -x "$snow_portal_bin/snow-shot-global-shortcut-backend-tests" ]] &&
+    command -v dbus-run-session >/dev/null 2>&1 &&
+    python3 -c 'import dbus' >/dev/null 2>&1; then
+    snow_portal_tmp="$(mktemp -d)"
+    cat >"$snow_portal_tmp/run.sh" <<'PORTAL_ROUND_TRIP'
+export SHOT_DIR="$1"
+python3 "$2" >"$1/mock.log" 2>&1 &
+sleep 2
+status=0
+SNOW_SHOT_TEST_PORTAL=1 timeout 60 "$3" >"$1/screenshot.log" 2>&1 || status=1
+SNOW_SHOT_TEST_PORTAL=1 timeout 60 "$4" >"$1/shortcut.log" 2>&1 || status=1
+exit $status
+PORTAL_ROUND_TRIP
+    if ! timeout 180 dbus-run-session -- bash "$snow_portal_tmp/run.sh" \
+            "$snow_portal_tmp" "$snow_repo_root/snow_shot/tests/mock_portal.py" \
+            "$snow_portal_bin/snow-shot-portal-screenshot-tests" \
+            "$snow_portal_bin/snow-shot-global-shortcut-backend-tests" >/dev/null 2>&1; then
+        sed -n '1,12p' "$snow_portal_tmp"/screenshot.log "$snow_portal_tmp"/shortcut.log >&2 || true
+        rm -rf "$snow_portal_tmp"
+        snow_fail "a portal round-trip failed, see the log above"
+    fi
+    rm -rf "$snow_portal_tmp"
+    snow_ok "the portal screenshot and shortcut clients round-trip on a mock portal"
+else
+    printf 'verify: note - skipped the portal round-trips (build the debug preset, install dbus-run-session and python3-dbus)\n'
+fi
+
 printf 'verify: all checks passed\n'
