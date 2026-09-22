@@ -165,6 +165,30 @@ sudo apt-get install --dry-run --reinstall --no-install-recommends ./build/snow-
 desktop-file-validate /usr/share/applications/com.snowshot.snow_shot.desktop
 ```
 
+## Linux capture backend plan
+
+The pieces below were checked against the workspace, so an implementation can
+start without repeating the reconnaissance:
+
+- Bind Xlib directly instead of adding a crate. `libX11.so` is present with its
+  development symlink, so `#[link(name = "X11")] extern "C"` declarations cover
+  the handful of calls needed; no new dependency and no registry fetch.
+- `Frame::from_bgra8(width, height, data)` matches what `XGetImage` returns for
+  a 32-bit TrueColor `ZPixmap`, so the captured buffer needs no channel swizzle.
+- `MonitorId`'s fields (`key`, `handle`, `name`, `is_primary`) are `pub(crate)`,
+  so a backend inside the crate constructs them directly; `handle` can carry the
+  RandR output id or the screen number.
+- `MonitorCapturer` only requires `capture`; the cancellation token, cursor
+  visibility, colour transform, backend-kind and prewarm hooks all default.
+
+Suggested order: add `platform/linux.rs` with an `X11Backend` implementing the
+six `CaptureBackend` methods and an `X11MonitorCapturer` whose `capture` reads
+the root window region through `XGetImage` and returns `Frame::from_bgra8`;
+select it in `platform/mod.rs` under `cfg(target_os = "linux")`; enumerate
+monitors with RandR and fall back to the root window as a single monitor when
+RandR is unavailable. Verify with a virtual display that has known content, so
+the captured pixels can be asserted rather than merely observed.
+
 ## Known limitations
 
 The Linux port currently covers the build system, the platform shims and the
