@@ -237,7 +237,7 @@ export const BaseLayerCore: React.FC<
                 },
                 autoStart: false,
                 antialias,
-                
+                preserveDrawingBuffer: true,
             });
             canvasApp.ticker.maxFPS = 60;
             canvasApp.ticker.minFPS = 0;
