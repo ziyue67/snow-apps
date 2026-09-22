@@ -5,6 +5,9 @@ namespace snow_shot::presentation {
 #ifdef Q_OS_WIN
 std::unique_ptr<GlobalMouseBackend> createWindowsGlobalMouseBackend();
 #endif
+#ifdef Q_OS_LINUX
+std::unique_ptr<GlobalMouseBackend> createLinuxGlobalMouseBackend();
+#endif
 #ifdef Q_OS_MACOS
 std::unique_ptr<GlobalMouseBackend> createMacOSGlobalMouseBackend();
 #endif
@@ -32,6 +35,8 @@ std::unique_ptr<GlobalMouseBackend> createGlobalMouseBackend() {
     return createWindowsGlobalMouseBackend();
 #elif defined(Q_OS_MACOS)
     return createMacOSGlobalMouseBackend();
+#elif defined(Q_OS_LINUX)
+    return createLinuxGlobalMouseBackend();
 #else
     return std::make_unique<UnsupportedGlobalMouseBackend>();
 #endif

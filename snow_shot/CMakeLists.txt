@@ -1326,6 +1326,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Global shortcuts likewise have no cross-platform implementation: the X11
     # backend grabs keys on the root window.
     list(APPEND PROJECT_CXX_SOURCES
+        src/platform/linux/globalmousebackend.cpp
         src/platform/linux/globalshortcutbackend.cpp
         src/platform/linux/waylandglobalshortcuts.cpp
         src/platform/linux/portalscreenshot.cpp
@@ -1559,10 +1560,13 @@ if(SNOW_SHOT_BUILD_TESTS)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         # The shared shortcut sources carry the dispatcher, so this target needs
         # both Linux backends, plus the fullscreen probe's Xlib dependency.
+        # The dispatcher references every Linux factory, so the target that
+        # compiles it has to carry the implementations too.
         target_sources(snow-shot-global-mouse-tests PRIVATE
+            src/platform/linux/globalmousebackend.cpp
             src/platform/linux/globalshortcutbackend.cpp
             src/platform/linux/waylandglobalshortcuts.cpp)
-        target_link_libraries(snow-shot-global-mouse-tests PRIVATE Qt6::DBus X11)
+        target_link_libraries(snow-shot-global-mouse-tests PRIVATE Qt6::DBus X11 Xi)
     endif()
     if(APPLE)
         target_link_libraries(snow-shot-global-mouse-tests PRIVATE
@@ -6544,7 +6548,9 @@ unset(_SNOW_SHOT_SAVED_PKG_CONFIG_PATH)
             # records that requirement, so it has to be satisfied by the final
             # link; naming it on the interface target keeps CMake placing -lX11
             # after the archive instead of before it, where it would not resolve.
-            target_link_libraries(snow_shot_rust_ffi_bundle INTERFACE X11)
+            # XInput2 is the same story: the pointer backend binds libXi, so the
+            # requirement has to be named here for the final link to satisfy it.
+            target_link_libraries(snow_shot_rust_ffi_bundle INTERFACE X11 Xi)
         endif()
     endif()
     target_link_libraries(snow_shot PRIVATE PkgConfig::SNOW_SHOT_FFMPEG)
