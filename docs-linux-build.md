@@ -155,3 +155,29 @@ follow-up work:
 - **Qt kit completeness.** An aqt kit that omits `qtdeclarative` ships an
   `lrelease` that cannot resolve `libQt6Qml`. Install the `qtdeclarative`
   archive, or make `lrelease` resolve against a matching Qt build.
+- **The package is not relocatable to machines without Qt 6.11.1.** The install
+  runpath records both `$ORIGIN` and the absolute Qt library directory this
+  build links against. A host that only has the distribution Qt (6.10.2 on the
+  reference system) fails to load the executable with a `Qt_6.11` symbol error,
+  and the generated `Depends` (which names the distribution Qt packages) does
+  not match the version the binary actually needs. Ship the Qt runtime in the
+  package, or build against the distribution Qt with the exact-version pins
+  relaxed.
+
+## Build configuration notes
+
+Two Linux-specific build settings are deliberate rather than incidental:
+
+- **Interprocedural optimization is off.** With `-flto` the linker emits copy
+  relocations for Qt and libstdc++ data symbols (`QGuiApplication`'s
+  `staticMetaObject`, typeinfo, vtables). The copied symbols make Qt bind its
+  own internal references to a stale snapshot, which crashes `QApplication`
+  construction before `main` runs. `SNOW_APPS_ENABLE_RELEASE_OPTIMIZATION` is
+  therefore applied only outside Linux.
+- **GCC-only diagnostics are relaxed.** GCC reports several classes of warnings
+  that neither Clang nor MSVC emits, so the sources were never written to
+  satisfy them: `-Wmissing-declarations` for C++, and `-Wshadow`,
+  `-Wuseless-cast`, `-Wduplicated-branches`, `-Wduplicated-cond`, `-Wlogical-op`,
+  `-Wchanges-meaning`, `-Wsubobject-linkage`, `-Wclobbered` and
+  `-Wnull-dereference` (the last two surface only once LTO is off, and the
+  `-Wnull-dereference` hits are inside Qt and libstdc++ headers).
