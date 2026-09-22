@@ -347,11 +347,12 @@ follow-up work:
   longer provides. It is a Qt-internal mismatch rather than an application
   defect, and the connect failure is harmless; confirming tray behaviour needs a
   real desktop session with a status-notifier host.
-- **Global mouse, XDG auto-start and focused-fullscreen detection.** These
-  platform services still resolve to the unsupported stubs, so the corresponding
-  features stay off. Global shortcuts and the physical cursor no longer do:
-  shortcuts are grabbed through X11 (`XGrabKey`, with the Wayland guard above)
-  or brokered through the portal, and the cursor is read and warped through X11.
+- **Global mouse.** This is the one platform service that still resolves to the
+  unsupported stub, so anything needing pointer events outside the application's
+  own windows stays off; XInput2 would be the route. The rest are done: shortcuts
+  are grabbed through X11 (`XGrabKey`, with the Wayland guard above) or brokered
+  through the portal, the cursor is read and warped through X11, auto-start
+  writes an XDG desktop entry, and fullscreen detection reads EWMH state.
 - **The bundled Qt runtime ships without its own licence text.** The package
   carries the application's `COPYRIGHT` and GPL-3.0 `LICENSE`, both third-party
   notice documents, and a `COPYRIGHT`/`LICENSE` pair per repository component
