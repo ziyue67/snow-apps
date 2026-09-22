@@ -6647,6 +6647,23 @@ if(APPLE)
     set(CMAKE_INSTALL_LIBDIR "snow_shot.app/Contents/Frameworks")
     set(CMAKE_INSTALL_DATADIR "snow_shot.app/Contents/Resources")
 endif()
+if(UNIX AND NOT APPLE)
+    # The installed binary must resolve the Qt modules it was compiled against
+    # and the sibling codec backend without relying on the build tree.
+    get_filename_component(_snow_shot_qt_lib_dir "${Qt6_DIR}/../.." ABSOLUTE)
+    # $ORIGIN covers libraries staged next to the binary; the ../lib entry
+    # covers the codec backend installed into the library directory.
+    set_target_properties(snow_shot PROPERTIES
+        INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;${_snow_shot_qt_lib_dir}"
+        INSTALL_RPATH_USE_LINK_PATH TRUE
+    )
+    if(TARGET snow_ocr_process)
+        set_target_properties(snow_ocr_process PROPERTIES
+            INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;${_snow_shot_qt_lib_dir}"
+            INSTALL_RPATH_USE_LINK_PATH TRUE
+        )
+    endif()
+endif()
 install(TARGETS snow_shot
     BUNDLE DESTINATION .
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
