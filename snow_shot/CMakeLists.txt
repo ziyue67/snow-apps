@@ -61,7 +61,7 @@ if(SNOW_SHOT_ENABLE_STRICT_COMPILE)
 endif()
 snow_enable_clang_tidy()
 
-find_package(Qt6 6.11.1 EXACT REQUIRED COMPONENTS Widgets LinguistTools Svg Network)
+find_package(Qt6 6.11.1 EXACT REQUIRED COMPONENTS Widgets LinguistTools Svg Network DBus)
 include(SnowTestCliGuard)
 include(SnowQtOffscreenTest)
 
@@ -1327,6 +1327,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # backend grabs keys on the root window.
     list(APPEND PROJECT_CXX_SOURCES
         src/platform/linux/globalshortcutbackend.cpp
+        src/platform/linux/portalscreenshot.cpp
         src/platform/linux/windowcaptureexclusion.cpp)
 endif()
 
@@ -1385,6 +1386,11 @@ target_link_libraries(snow_shot PRIVATE
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/SnowShotUpdates.cmake")
 if(WIN32)
     target_link_libraries(snow_shot PRIVATE ole32 oleaut32 shell32 uuid)
+endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # A Wayland session can only be captured through the XDG Desktop Portal,
+    # which is reached over the session bus.
+    target_link_libraries(snow_shot PRIVATE Qt6::DBus)
 endif()
 target_compile_definitions(snow_shot PRIVATE
     QT_MESSAGELOGCONTEXT

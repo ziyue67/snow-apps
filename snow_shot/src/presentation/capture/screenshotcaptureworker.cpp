@@ -6,6 +6,7 @@
 #include "screenshotcaptureperfinstrumentation.h"
 #include "snow_shot/presentation/screenshotcapturecoordinator.h"
 #include "snow_shot/presentation/capture/screenshotcapturepolicy.h"
+#include "snow_shot/platform/portalscreenshot.h"
 #include "snow_shot/storage/settingsadapters.h"
 
 #include "snow_capture.h"
@@ -105,6 +106,31 @@ void ScreenshotCaptureWorker::capture(const ScreenshotCaptureRequest& request,
     }
     SNOW_SHOT_CAPTURE_PERF_MILESTONE("capture.native_returned");
     if (nativeResult == nullptr) {
+        // A Wayland session cannot be read through X11: the X root window belongs
+        // to XWayland and holds no screen content, so the native backend declines
+        // and the desktop has to come from the XDG Desktop Portal instead.
+        if (snow_shot::platform::portalScreenshotRequired()) {
+            QString portalError;
+            const QImage portalImage = snow_shot::platform::takePortalScreenshot(&portalError);
+            if (!portalImage.isNull()) {
+                CapturedDisplayModel display;
+                display.stableId = QStringLiteral("portal");
+                display.name = QStringLiteral("Portal");
+                display.physicalRect = QRect(QPoint(0, 0), portalImage.size());
+                display.canvasRect = display.physicalRect;
+                display.image = portalImage;
+                display.active = true;
+                display.backend = ScreenshotCaptureBackend::Auto;
+                captureResult.displays.push_back(std::move(display));
+                captureResult.succeeded = true;
+                postCaptureResult(coordinator, std::move(captureResult));
+                return;
+            }
+            captureResult.errorMessage = portalError;
+            postCaptureResult(coordinator, std::move(captureResult));
+            return;
+        }
+
         const QString captureError = nativeCaptureError("Screenshot capture failed");
         static_cast<void>(snow_capture_desktop_session_reset_to_prepared(m_session));
         captureResult.errorMessage = captureError;
