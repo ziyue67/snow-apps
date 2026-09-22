@@ -17,6 +17,7 @@ namespace snow_shot::presentation {
 #endif
 #ifdef Q_OS_LINUX
 [[nodiscard]] std::unique_ptr<GlobalShortcutBackend> createLinuxGlobalShortcutBackend();
+[[nodiscard]] std::unique_ptr<GlobalShortcutBackend> createWaylandGlobalShortcutBackend();
 #endif
 
 } // namespace snow_shot::presentation

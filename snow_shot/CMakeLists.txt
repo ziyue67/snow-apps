@@ -1327,6 +1327,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # backend grabs keys on the root window.
     list(APPEND PROJECT_CXX_SOURCES
         src/platform/linux/globalshortcutbackend.cpp
+        src/platform/linux/waylandglobalshortcuts.cpp
         src/platform/linux/portalscreenshot.cpp
         src/platform/linux/windowcaptureexclusion.cpp)
 endif()
@@ -1919,11 +1920,14 @@ if(SNOW_SHOT_BUILD_TESTS)
             src/presentation/services/globalshortcutbackend.cpp
             src/presentation/services/globalshortcutbackend_p.h
             src/platform/linux/globalshortcutbackend.cpp
+            # The dispatcher picks the portal backend on Wayland, so the target
+            # has to carry it or the reference dangles at link time.
+            src/platform/linux/waylandglobalshortcuts.cpp
         )
         target_include_directories(snow-shot-global-shortcut-backend-tests PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/include"
         )
-        target_link_libraries(snow-shot-global-shortcut-backend-tests PRIVATE Qt6::Gui X11)
+        target_link_libraries(snow-shot-global-shortcut-backend-tests PRIVATE Qt6::Gui Qt6::DBus X11)
         add_test(NAME snow-shot-global-shortcut-backend-tests
                  COMMAND snow-shot-global-shortcut-backend-tests)
     endif()

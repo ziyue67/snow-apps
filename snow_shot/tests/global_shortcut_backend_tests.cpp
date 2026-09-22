@@ -1,6 +1,11 @@
 // Checks that the X11 global shortcut backend does not claim success on a
 // Wayland session.
 //
+// The platform factory now routes a Wayland session to the portal backend, so
+// this constructs the X11 backend directly: the guard still matters as defence
+// in depth, and it is the only thing standing between a Wayland session and a
+// grab that registers and then never fires.
+//
 // XGrabKey only reaches XWayland: a native Wayland client never routes its keys
 // through X, so a grab registers and then never fires. The backend has to report
 // the platform as unsupported instead of letting the settings UI show a shortcut
@@ -40,7 +45,7 @@ int main(int argc, char** argv) {
     qunsetenv("WAYLAND_DISPLAY");
     {
         const std::unique_ptr<GlobalShortcutBackend> backend =
-            snow_shot::presentation::createPlatformGlobalShortcutBackend();
+            snow_shot::presentation::createLinuxGlobalShortcutBackend();
         const auto validation = backend->validateShortcut(binding);
         require(validation.supported,
                 "an X11 session must accept an ordinary shortcut");
@@ -49,7 +54,7 @@ int main(int argc, char** argv) {
     qputenv("WAYLAND_DISPLAY", "wayland-0");
     {
         const std::unique_ptr<GlobalShortcutBackend> backend =
-            snow_shot::presentation::createPlatformGlobalShortcutBackend();
+            snow_shot::presentation::createLinuxGlobalShortcutBackend();
         const auto validation = backend->validateShortcut(binding);
         require(!validation.supported,
                 "a Wayland session must not call the shortcut usable");

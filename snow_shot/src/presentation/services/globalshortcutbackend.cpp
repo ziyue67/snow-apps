@@ -1,5 +1,7 @@
 #include "globalshortcutbackend_p.h"
 
+#include <QByteArray>
+
 namespace snow_shot::presentation {
 namespace {
 
@@ -38,6 +40,11 @@ std::unique_ptr<GlobalShortcutBackend> createPlatformGlobalShortcutBackend() {
 #elif defined(Q_OS_MACOS)
     return createMacOSGlobalShortcutBackend();
 #elif defined(Q_OS_LINUX)
+    // A Wayland session cannot grab keys through X: XGrabKey only reaches
+    // XWayland clients, so the compositor brokers the shortcuts instead.
+    if (!qgetenv("WAYLAND_DISPLAY").isEmpty()) {
+        return createWaylandGlobalShortcutBackend();
+    }
     return createLinuxGlobalShortcutBackend();
 #else
     return std::make_unique<UnsupportedGlobalShortcutBackend>();
