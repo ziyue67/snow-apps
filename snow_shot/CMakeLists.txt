@@ -1880,6 +1880,10 @@ if(SNOW_SHOT_BUILD_TESTS)
         target_compile_definitions(snow-shot-physical-cursor-tests PRIVATE NOMINMAX)
         target_link_libraries(snow-shot-physical-cursor-tests PRIVATE user32)
     endif()
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # The X11 backend reads and warps the pointer through Xlib.
+        target_link_libraries(snow-shot-physical-cursor-tests PRIVATE X11)
+    endif()
     add_test(NAME snow-shot-physical-cursor-tests
              COMMAND snow-shot-physical-cursor-tests)
 
@@ -3359,6 +3363,10 @@ if(SNOW_SHOT_BUILD_TESTS)
             dwmapi
             user32
         )
+    endif()
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # This target compiles the X11 physical cursor implementation.
+        target_link_libraries(snow-shot-pinned-window-tests PRIVATE X11)
     endif()
     add_test(
         NAME snow-shot-pinned-window-tests

@@ -284,8 +284,10 @@ void failuresHaveDistinctOutcomes() {
                 !readOnly.moveOnePixel(PhysicalCursorDirection::Right).commandApplied(),
             "pointer reading must remain available without a cursor writer");
     PhysicalCursor unsupported;
-#if defined(Q_OS_WIN) || defined(_WIN32)
-    require(unsupported.isSupported(), "the Windows physical cursor backend is unavailable");
+#if defined(Q_OS_WIN) || defined(_WIN32) || defined(Q_OS_LINUX)
+    // Both backends report support from the platform they were built for; the
+    // accessors themselves report a missing display at call time.
+    require(unsupported.isSupported(), "the native physical cursor backend is unavailable");
 #else
     require(!unsupported.isSupported() &&
                 unsupported.moveOnePixel(PhysicalCursorDirection::Up).status ==

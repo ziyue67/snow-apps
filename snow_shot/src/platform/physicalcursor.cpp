@@ -17,10 +17,23 @@
 #include <QScreen>
 #include <QPointer>
 #include <memory>
+#else
+#include <QScopedPointer>
+#include <X11/Xlib.h>
 #endif
 
 namespace snow_shot::platform {
 namespace {
+
+#if !defined(Q_OS_WIN) && !defined(_WIN32) && !defined(Q_OS_MACOS)
+// Xlib connections are not RAII; close the display on every exit path.
+struct X11DisplayDeleter {
+    static void cleanup(Display* display) {
+        if (display)
+            XCloseDisplay(display);
+    }
+};
+#endif
 
 PhysicalCursorAccess nativeAccess() {
 #if defined(Q_OS_WIN) || defined(_WIN32)
@@ -87,7 +100,51 @@ PhysicalCursorAccess nativeAccess() {
         },
         false};
 #else
-    return {};
+    // X11 reports pointer coordinates in root-window pixels, which is the
+    // unscaled space this accessor exists to expose; QCursor::pos() would go
+    // through Qt's high-DPI scaling instead.
+    return PhysicalCursorAccess{
+        true,
+        []() -> std::optional<QPoint> {
+            QScopedPointer<Display, X11DisplayDeleter> display(XOpenDisplay(nullptr));
+            if (!display)
+                return std::nullopt;
+            Window root = DefaultRootWindow(display.data());
+            Window returnedRoot = 0;
+            Window returnedChild = 0;
+            int rootX = 0;
+            int rootY = 0;
+            int windowX = 0;
+            int windowY = 0;
+            unsigned int mask = 0;
+            if (!XQueryPointer(display.data(), root, &returnedRoot, &returnedChild, &rootX, &rootY,
+                               &windowX, &windowY, &mask))
+                return std::nullopt;
+            return QPoint(rootX, rootY);
+        },
+        [](const QPoint& pixels) {
+            QScopedPointer<Display, X11DisplayDeleter> display(XOpenDisplay(nullptr));
+            if (!display)
+                return false;
+            Window root = DefaultRootWindow(display.data());
+            XWarpPointer(display.data(), None, root, 0, 0, 0, 0, pixels.x(), pixels.y());
+            XSync(display.data(), False);
+            // Confirm the warp landed where it was asked to go, so callers can
+            // treat a false result as "the pointer did not move".
+            Window returnedRoot = 0;
+            Window returnedChild = 0;
+            int rootX = 0;
+            int rootY = 0;
+            int windowX = 0;
+            int windowY = 0;
+            unsigned int mask = 0;
+            if (!XQueryPointer(display.data(), root, &returnedRoot, &returnedChild, &rootX, &rootY,
+                               &windowX, &windowY, &mask))
+                return false;
+            return rootX == pixels.x() && rootY == pixels.y();
+        },
+        {},
+        true};
 #endif
 }
 
