@@ -32,6 +32,7 @@ DirectCaptureFrame captureDirectTarget(const DirectCaptureRequest& request) {
             result.identity = QStringLiteral("portal");
             return result;
         }
+        qWarning("Portal screenshot failed: %s", qPrintable(portalError));
         result.error = portalError;
         return result;
     }
