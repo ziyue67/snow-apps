@@ -26,6 +26,7 @@
 #include "widgets/tooltip.h"
 
 #include <QApplication>
+#include <QScreen>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QFile>
@@ -272,8 +273,8 @@ int main(int argc, char* argv[]) {
     {
         const QString selfPath = QFile::symLinkTarget(QStringLiteral("/proc/self/exe"));
         if (!selfPath.isEmpty()) {
-            QCoreApplication::addLibraryPath(
-                QFileInfo(selfPath).absolutePath() + QStringLiteral("/../lib/snow-shot/plugins"));
+            QCoreApplication::addLibraryPath(QFileInfo(selfPath).absolutePath() +
+                                             QStringLiteral("/../lib/snow-shot/plugins"));
         }
     }
 #endif
@@ -283,11 +284,30 @@ int main(int argc, char* argv[]) {
     // "An app id is required" and the compositor never sees a shortcut.
     QGuiApplication::setDesktopFileName(QStringLiteral("com.snowshot.snow_shot"));
 
+    // Windows are sized in logical pixels, which Qt derives from the screen's
+    // device pixel ratio. On a fractionally scaled desktop it rounds that ratio
+    // to a whole number - a 125% screen is reported as 2 - so the logical size
+    // Qt works from stops matching the geometry the compositor actually uses and
+    // every physical/logical conversion drifts by that ratio. Passing the real
+    // value through keeps Qt consistent with the compositor at any scale.
+    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
+        Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+
     QApplication app(argc, argv);
+    // A fractionally scaled desktop is where logical and physical pixels drift
+    // apart, so record what Qt believes the screen is alongside the backend.
+    QString screenSummary;
+    if (const QScreen* primaryScreen = QGuiApplication::primaryScreen()) {
+        screenSummary = QStringLiteral("%1x%2@%3")
+                            .arg(primaryScreen->geometry().width())
+                            .arg(primaryScreen->geometry().height())
+                            .arg(primaryScreen->devicePixelRatio());
+    }
     snow_shot::diagnostics::logEvent(QStringLiteral("snow_shot.app"),
                                      QStringLiteral("application.platform"),
                                      {{QStringLiteral("backend"), QGuiApplication::platformName()},
-                                      {QStringLiteral("os"), QSysInfo::kernelVersion()}});
+                                      {QStringLiteral("os"), QSysInfo::kernelVersion()},
+                                      {QStringLiteral("screen"), screenSummary}});
     static_cast<void>(snow_shot::presentation::capture::resolveAutoScreenshotApiMode());
 #if defined(SNOW_SHOT_PIN_PERF_INSTRUMENTATION)
     snow_shot::presentation::pin_perf::configureTrace(
