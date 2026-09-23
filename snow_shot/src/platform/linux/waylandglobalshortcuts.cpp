@@ -311,7 +311,12 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
 
     void onActivated(const QDBusObjectPath& session, const QString& shortcutId,
                      qulonglong timestamp, const QVariantMap& options) {
-        Q_UNUSED(session);
+        // Only react to the session this backend owns, the way mark-shot filters
+        // its activations. The portal also emits Activated on its desktop path,
+        // where there is no session to compare and every session is accepted.
+        if (!session.path().isEmpty() && session.path() != m_sessionPath) {
+            return;
+        }
         Q_UNUSED(timestamp);
         Q_UNUSED(options);
         const auto it = m_activationByShortcut.constFind(shortcutId);
