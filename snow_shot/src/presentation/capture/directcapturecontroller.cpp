@@ -266,6 +266,11 @@ void DirectCaptureController::captureCurrentMonitor() {
     if (id)
         request.monitorName = QStringLiteral("display:%1").arg(id);
 #endif
+#ifdef Q_OS_LINUX
+    // Without a name the capture is rejected before it starts, so supply the
+    // one the Linux backend exposes for the screen it captures.
+    request.monitorName = QStringLiteral("X11 screen");
+#endif
     m_impl->workflow.enqueue(std::move(request));
 }
 } // namespace snow_shot::presentation

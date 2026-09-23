@@ -695,6 +695,16 @@ class ApplicationController::Impl {
         }));
     }
 
+    // The full-screen capture copies to the clipboard and needs no selection, so
+    // a keybinding can reach it without any overlay interaction.
+    void startFullScreenCaptureFromCommandLine() {
+        if (!allowPermissions(presentation::requiredPermissions(
+                presentation::GlobalShortcutAction::ScreenshotFullScreen,
+                permissions.microphoneEnabled())))
+            return;
+        ensureDirectCaptureController().captureCurrentMonitor();
+    }
+
     void showMainWindow() {
         ensureMainWindow().showAndActivate();
     }
@@ -826,6 +836,10 @@ void ApplicationController::showMainWindow() {
 
 void ApplicationController::handleLaunchRequest(const QStringList& arguments) {
     if (arguments.contains(QStringLiteral("--autostart"))) {
+        return;
+    }
+    if (arguments.contains(QStringLiteral("--screenshot-full"))) {
+        m_impl->startFullScreenCaptureFromCommandLine();
         return;
     }
     if (arguments.contains(QStringLiteral("--screenshot-copy"))) {
