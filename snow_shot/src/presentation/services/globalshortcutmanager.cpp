@@ -84,6 +84,9 @@ QString gnomeCommandFor(GlobalShortcutAction action) {
     case GlobalShortcutAction::ScreenshotCopy:
         argument = QStringLiteral("--screenshot-copy");
         break;
+    case GlobalShortcutAction::ScreenshotFullScreen:
+        argument = QStringLiteral("--screenshot-full");
+        break;
     default:
         return {};
     }
