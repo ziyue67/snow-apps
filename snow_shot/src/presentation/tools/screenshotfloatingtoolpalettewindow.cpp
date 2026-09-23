@@ -47,6 +47,13 @@ namespace native = screenshot_floating_palette_native;
 
 #if !defined(Q_OS_MACOS)
 constexpr QSize kToolbarWindowPresetSize(1242, 142);
+
+// Largest share of the desktop the palette may cover once it has been laid out.
+constexpr qreal kToolbarMaxDesktopFraction = 0.92;
+
+// Never shrink the palette past this share of its designed size; below it the
+// toolbar stops being usable and the desktop is simply too small.
+constexpr qreal kToolbarMinDesktopFitScale = 0.2;
 #endif
 } // namespace
 
@@ -853,9 +860,19 @@ void ScreenshotFloatingToolPaletteWindow::syncPalettePhysicalScale() {
                                  : currentWindowDevicePixelRatio();
     const qreal referenceDpr = m_referenceDevicePixelRatio;
 #endif
+    qreal contentScale = m_paletteScaleMultiplier;
+#if !defined(Q_OS_MACOS)
+    // The palette is laid out from physical design metrics, but Qt sizes windows
+    // and widgets in logical pixels. Where the desktop is scaled, the design does
+    // not fit: at 200% the preset alone already asks for 1242 logical pixels on a
+    // desktop only 960 logical pixels wide, which pushed the toolbar past both
+    // screen edges. Fold a fit factor into the control scale so the window and
+    // every control inside it shrink together.
+    contentScale *= paletteDesktopFitScale(referenceDpr, currentDpr, contentScale);
+#endif
     const adqt::widgets::AdControlScaleContext context =
         adqt::widgets::AdControlScaleContext::fromDprsAndContentScale(referenceDpr, currentDpr,
-                                                                      m_paletteScaleMultiplier);
+                                                                      contentScale);
 #if !defined(Q_OS_MACOS)
     if (m_dpiController != nullptr && !m_dpiController->hasBaseline()) {
         // Establish the requested pixel extent before moving/resizing can deliver
@@ -867,6 +884,42 @@ void ScreenshotFloatingToolPaletteWindow::syncPalettePhysicalScale() {
 #endif
     m_paletteHost->setScaleContext(context);
     m_paletteHost->setShadowMargins(ScreenshotToolPaletteHost::defaultShadowMargins());
+}
+
+qreal ScreenshotFloatingToolPaletteWindow::paletteDesktopFitScale(qreal referenceDpr,
+                                                                  qreal currentDpr,
+                                                                  qreal contentScale) const {
+    const QScreen* targetScreen =
+        m_placementScreen.data() != nullptr ? m_placementScreen.data() : screen();
+    if (targetScreen == nullptr || !std::isfinite(referenceDpr) || !std::isfinite(currentDpr) ||
+        currentDpr <= 0.0 || !std::isfinite(contentScale) || contentScale <= 0.0) {
+        return 1.0;
+    }
+
+    // QScreen geometry is always expressed in logical pixels, while the preset is
+    // the physical design size of the palette. Project the design into the same
+    // logical space the desktop is measured in, then shrink only if it overflows.
+    const qreal projectedScale = referenceDpr / currentDpr * contentScale;
+    const qreal projectedWidth = kToolbarWindowPresetSize.width() * projectedScale;
+    const qreal projectedHeight = kToolbarWindowPresetSize.height() * projectedScale;
+    if (!std::isfinite(projectedWidth) || !std::isfinite(projectedHeight) ||
+        projectedWidth <= 0.0 || projectedHeight <= 0.0) {
+        return 1.0;
+    }
+
+    QRect desktop = targetScreen->availableGeometry();
+    if (desktop.isEmpty()) {
+        desktop = targetScreen->geometry();
+    }
+    if (desktop.isEmpty()) {
+        return 1.0;
+    }
+
+    const qreal widthFit =
+        static_cast<qreal>(desktop.width()) * kToolbarMaxDesktopFraction / projectedWidth;
+    const qreal heightFit =
+        static_cast<qreal>(desktop.height()) * kToolbarMaxDesktopFraction / projectedHeight;
+    return std::clamp<qreal>(std::min(widthFit, heightFit), kToolbarMinDesktopFitScale, 1.0);
 }
 
 void ScreenshotFloatingToolPaletteWindow::refreshStablePhysicalWindowSize() {
@@ -1257,9 +1310,14 @@ QSize ScreenshotFloatingToolPaletteWindow::fixedWindowSizeHint() const {
     // rows; the Windows backing-store reserve must not cover the canvas.
     return m_paletteHost != nullptr ? m_paletteHost->palette()->size() : QSize(1, 1);
 #else
-    const qreal scale = m_paletteHost != nullptr ? m_paletteHost->physicalScale() : 1.0;
-    return QSize(qMax(1, qRound(kToolbarWindowPresetSize.width() * scale)),
-                 qMax(1, qRound(kToolbarWindowPresetSize.height() * scale)));
+    const qreal physicalScale = m_paletteHost != nullptr ? m_paletteHost->physicalScale() : 1.0;
+    const qreal scale = physicalScale > 0.0 ? physicalScale : 1.0;
+    // The preset is the physical design size and the control scale already folds
+    // in both the monitor DPI ratio and the desktop fit factor, so this is the
+    // logical extent the window must request.
+    const QSize computed(qMax(1, qRound(kToolbarWindowPresetSize.width() * scale)),
+                         qMax(1, qRound(kToolbarWindowPresetSize.height() * scale)));
+    return computed;
 #endif
 }
 
