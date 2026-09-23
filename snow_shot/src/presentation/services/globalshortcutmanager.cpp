@@ -7,9 +7,12 @@
 #include "snow_shot/storage/applicationstorage.h"
 #include "snow_shot/storage/settingsadapters.h"
 
+#include <QCoreApplication>
 #include <QHash>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QSet>
+#include <QStandardPaths>
 
 #include <algorithm>
 #include <array>
@@ -18,6 +21,139 @@
 
 namespace snow_shot::presentation {
 namespace {
+
+#if defined(Q_OS_LINUX)
+// GNOME installs global shortcuts as its own media-keys custom keybindings; the
+// XDG portal never completes a bind on that desktop. A keybinding runs a command
+// line rather than signalling a running process, so only actions that can be
+// started from one can be installed this way.
+constexpr auto kGnomeMediaKeysSchema = "org.gnome.settings-daemon.plugins.media-keys";
+constexpr auto kGnomeKeybindingSchema =
+    "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding";
+constexpr auto kGnomeKeybindingPrefix =
+    "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/snow-shot-";
+constexpr auto kGnomeKeybindingsKey = "custom-keybindings";
+
+bool runGsettings(const QStringList& arguments) {
+    QProcess process;
+    process.start(QStringLiteral("gsettings"), arguments);
+    if (!process.waitForStarted(3000)) {
+        return false;
+    }
+    return process.waitForFinished(5000) && process.exitCode() == 0;
+}
+
+// gsettings parses the value as GVariant, so it has to arrive as a quoted
+// literal; a bare one stops at the first space ("expected end of input").
+QString gnomeEscape(const QString& value) {
+    QString escaped = value;
+    escaped.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
+    escaped.replace(QLatin1Char('\''), QStringLiteral("\\'"));
+    return QStringLiteral("'%1'").arg(escaped);
+}
+
+// "Shift+F1" becomes "<Shift>F1": GNOME spells modifiers in angle brackets.
+QString gnomeAccelerator(const QString& portableText) {
+    const QStringList parts = portableText.split(QLatin1Char('+'), Qt::SkipEmptyParts);
+    if (parts.isEmpty()) {
+        return {};
+    }
+    QString accelerator;
+    for (int index = 0; index + 1 < parts.size(); ++index) {
+        const QString modifier = parts.at(index).trimmed();
+        if (modifier.compare(QStringLiteral("Ctrl"), Qt::CaseInsensitive) == 0) {
+            accelerator += QStringLiteral("<Control>");
+        } else if (modifier.compare(QStringLiteral("Shift"), Qt::CaseInsensitive) == 0) {
+            accelerator += QStringLiteral("<Shift>");
+        } else if (modifier.compare(QStringLiteral("Alt"), Qt::CaseInsensitive) == 0) {
+            accelerator += QStringLiteral("<Alt>");
+        } else if (modifier.compare(QStringLiteral("Meta"), Qt::CaseInsensitive) == 0) {
+            accelerator += QStringLiteral("<Super>");
+        }
+    }
+    accelerator += parts.constLast().trimmed();
+    return accelerator;
+}
+
+QString gnomeCommandFor(GlobalShortcutAction action) {
+    if (action != GlobalShortcutAction::Screenshot) {
+        return {};
+    }
+    return QStringLiteral("\"%1\" --screenshot").arg(QCoreApplication::applicationFilePath());
+}
+
+// Gate on the schema rather than on XDG_CURRENT_DESKTOP: a launch that does not
+// inherit the session environment still has the schema, and on a desktop without
+// it the query simply fails.
+bool gnomePlatformReady() {
+    static const bool ready = [] {
+        if (QStandardPaths::findExecutable(QStringLiteral("gsettings")).isEmpty()) {
+            return false;
+        }
+        return runGsettings({QStringLiteral("get"), QString::fromLatin1(kGnomeMediaKeysSchema),
+                             QString::fromLatin1(kGnomeKeybindingsKey)});
+    }();
+    return ready;
+}
+
+bool gnomeRegisterShortcut(GlobalShortcutAction action, int registrationId,
+                           const shortcuts::ShortcutBinding& binding) {
+    if (!gnomePlatformReady()) {
+        return false;
+    }
+    const QString command = gnomeCommandFor(action);
+    const QString accelerator = gnomeAccelerator(binding.portableText);
+    if (command.isEmpty() || accelerator.isEmpty()) {
+        return false;
+    }
+
+    QStringList paths;
+    QProcess query;
+    query.start(QStringLiteral("gsettings"),
+                {QStringLiteral("get"), QString::fromLatin1(kGnomeMediaKeysSchema),
+                 QString::fromLatin1(kGnomeKeybindingsKey)});
+    if (!query.waitForStarted(3000) || !query.waitForFinished(5000)) {
+        return false;
+    }
+    const QString raw = QString::fromUtf8(query.readAllStandardOutput());
+    for (const QString& piece : raw.split(QLatin1Char('\''), Qt::SkipEmptyParts)) {
+        const QString trimmed = piece.trimmed();
+        if (trimmed.startsWith(QLatin1Char('/'))) {
+            paths.append(trimmed);
+        }
+    }
+
+    const QString prefix = QString::fromLatin1(kGnomeKeybindingPrefix);
+    paths.erase(
+        std::remove_if(paths.begin(), paths.end(),
+                       [&prefix](const QString& value) { return value.startsWith(prefix); }),
+        paths.end());
+    const QString path = QStringLiteral("%1action-%2/").arg(prefix).arg(registrationId);
+    paths.append(path);
+
+    QString serialized = QStringLiteral("[");
+    for (int index = 0; index < paths.size(); ++index) {
+        if (index != 0) {
+            serialized += QStringLiteral(", ");
+        }
+        serialized += QStringLiteral("'%1'").arg(paths.at(index));
+    }
+    serialized += QStringLiteral("]");
+    if (!runGsettings({QStringLiteral("set"), QString::fromLatin1(kGnomeMediaKeysSchema),
+                       QString::fromLatin1(kGnomeKeybindingsKey), serialized})) {
+        return false;
+    }
+
+    const QString schemaPath =
+        QStringLiteral("%1:%2").arg(QLatin1String(kGnomeKeybindingSchema), path);
+    return runGsettings({QStringLiteral("set"), schemaPath, QStringLiteral("name"),
+                         gnomeEscape(QStringLiteral("Snow Shot"))}) &&
+           runGsettings({QStringLiteral("set"), schemaPath, QStringLiteral("command"),
+                         gnomeEscape(command)}) &&
+           runGsettings({QStringLiteral("set"), schemaPath, QStringLiteral("binding"),
+                         gnomeEscape(accelerator)});
+}
+#endif
 
 constexpr int MAX_SHORTCUTS_PER_ACTION = 2;
 constexpr int FIRST_REGISTRATION_ID = 0x2200;
@@ -442,6 +578,16 @@ class GlobalShortcutManager::Impl {
                     state.bindings.push_back(binding);
                     continue;
                 }
+#if defined(Q_OS_LINUX)
+                if (gnomeRegisterShortcut(action, registrationId, bindingValue)) {
+                    binding.registered = true;
+                    state.bindings.push_back(binding);
+                    m_activeRegistrations.insert(
+                        activeOwner, ActiveRegistration{action, bindingValue, registrationId});
+                    m_registrationKeysById.insert(registrationId, activeOwner);
+                    continue;
+                }
+#endif
                 const auto result = m_backend->registerShortcut(registrationId, bindingValue);
                 binding.registered = result.registered;
                 binding.failureReason = result.failureReason;
