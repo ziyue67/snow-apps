@@ -72,10 +72,18 @@ struct ClipboardOwnerCommand final {
 };
 
 std::optional<ClipboardOwnerCommand> clipboardOwnerCommand() {
-    const bool wayland =
-        qEnvironmentVariable("XDG_SESSION_TYPE").trimmed().toLower() == QLatin1String("wayland");
-    const QString executable = QStandardPaths::findExecutable(wayland ? QStringLiteral("wl-copy")
-                                                                      : QStringLiteral("xclip"));
+    // Choose the owner from what is actually available rather than from a single
+    // environment variable: a launch that does not inherit the session
+    // environment still has the Wayland socket, and picking the wrong tool drops
+    // the image silently instead of handing it to an owner that outlives us.
+    const bool waylandSession =
+        qEnvironmentVariable("XDG_SESSION_TYPE").trimmed().toLower() == QLatin1String("wayland") ||
+        !qEnvironmentVariable("WAYLAND_DISPLAY").isEmpty() ||
+        !qEnvironmentVariable("WAYLAND_SOCKET").isEmpty();
+    const QString waylandExecutable = QStandardPaths::findExecutable(QStringLiteral("wl-copy"));
+    const bool wayland = waylandSession && !waylandExecutable.isEmpty();
+    const QString executable =
+        wayland ? waylandExecutable : QStandardPaths::findExecutable(QStringLiteral("xclip"));
     if (executable.isEmpty()) {
         return std::nullopt;
     }
