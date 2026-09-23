@@ -153,6 +153,50 @@ bool gnomeRegisterShortcut(GlobalShortcutAction action, int registrationId,
            runGsettings({QStringLiteral("set"), schemaPath, QStringLiteral("binding"),
                          gnomeEscape(accelerator)});
 }
+// Drop the entry this registration owns and clear what it left in dconf, so a
+// shortcut the user turns off does not keep a dead binding behind. Other
+// applications' entries in the list are left alone.
+void gnomeUnregisterShortcut(int registrationId) {
+    if (!gnomePlatformReady()) {
+        return;
+    }
+    const QString path = QStringLiteral("%1action-%2/")
+                             .arg(QLatin1String(kGnomeKeybindingPrefix))
+                             .arg(registrationId);
+
+    QStringList paths;
+    QProcess query;
+    query.start(QStringLiteral("gsettings"),
+                {QStringLiteral("get"), QString::fromLatin1(kGnomeMediaKeysSchema),
+                 QString::fromLatin1(kGnomeKeybindingsKey)});
+    if (!query.waitForStarted(3000) || !query.waitForFinished(5000)) {
+        return;
+    }
+    const QString raw = QString::fromUtf8(query.readAllStandardOutput());
+    for (const QString& piece : raw.split(QLatin1Char('\''), Qt::SkipEmptyParts)) {
+        const QString trimmed = piece.trimmed();
+        if (trimmed.startsWith(QLatin1Char('/'))) {
+            paths.append(trimmed);
+        }
+    }
+    if (paths.removeAll(path) == 0) {
+        return;
+    }
+
+    QString serialized = QStringLiteral("[");
+    for (int index = 0; index < paths.size(); ++index) {
+        if (index != 0) {
+            serialized += QStringLiteral(", ");
+        }
+        serialized += QStringLiteral("'%1'").arg(paths.at(index));
+    }
+    serialized += QStringLiteral("]");
+    runGsettings({QStringLiteral("set"), QString::fromLatin1(kGnomeMediaKeysSchema),
+                  QString::fromLatin1(kGnomeKeybindingsKey), serialized});
+    runGsettings({QStringLiteral("reset-recursively"),
+                  QStringLiteral("%1:%2").arg(QLatin1String(kGnomeKeybindingSchema), path)});
+}
+
 #endif
 
 constexpr int MAX_SHORTCUTS_PER_ACTION = 2;
@@ -509,6 +553,9 @@ class GlobalShortcutManager::Impl {
     void unregisterAll() {
         for (const auto& registration : std::as_const(m_activeRegistrations)) {
             m_backend->unregisterShortcut(registration.registrationId);
+#if defined(Q_OS_LINUX)
+            gnomeUnregisterShortcut(registration.registrationId);
+#endif
         }
         m_activeRegistrations.clear();
         m_registrationKeysById.clear();
@@ -545,6 +592,9 @@ class GlobalShortcutManager::Impl {
                 const ActiveRegistration registration = m_activeRegistrations.take(key);
                 m_registrationKeysById.remove(registration.registrationId);
                 m_backend->unregisterShortcut(registration.registrationId);
+#if defined(Q_OS_LINUX)
+                gnomeUnregisterShortcut(registration.registrationId);
+#endif
             }
         }
 
