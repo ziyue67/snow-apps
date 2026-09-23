@@ -412,3 +412,37 @@ Two Linux-specific build settings are deliberate rather than incidental:
   `/proc/self/exe` because `applicationDirPath()` needs a live instance.
   Installing a `qt.conf` or a `platforms/` directory into `/usr/bin` was
   rejected: every Qt application in that directory would read it.
+
+## Wayland overlay geometry and HiDPI scaling
+
+The capture overlay maps the portal's screenshot into the window with
+`canvasToLogicalScale = logicalRect.width / canvasRect.width`
+(`ScreenshotGeometryMapper::displayViewportGeometry`). The portal returns the
+screen in **physical** pixels, while the overlay window lives in **logical**
+coordinates, so the two only agree when the screen scale is taken into account.
+
+Measured on a 1920x1080 panel driven at 200% (GNOME on Wayland, Qt 6.11.1,
+`screen=eDP-1`), instrumenting the mapper gave:
+
+```
+OVERLAY-GEOM logical=960x540  canvas=1920x1080 scale=0.5000 screen=eDP-1 dpr=2.000
+```
+
+So at 200% the logical desktop is 960x540 and a scale of 0.5 is correct: the
+1920x1080 capture is drawn at half size to fill the 960x540 logical window. A
+"low resolution overlay" here is the logical size, not a rendering fault.
+
+Two consequences worth remembering:
+
+* `org.gnome.desktop.interface scaling-factor` reports the **X11** setting and
+  returned `1` on this machine even though the session ran at 200%. Read
+  `QScreen::devicePixelRatio()` instead when reasoning about scale.
+* Anything that mixes the two spaces is off by the scale factor. The colour
+  picker was observed reporting `X: 1909` while logical coordinates only span
+  `0..959`, so cursor and selection positions need to be resolved in one space
+  consistently while capture stays in physical pixels.
+
+Frameless `Qt::Tool` overlays cannot be positioned with `setGeometry()` on
+Wayland — the compositor owns toplevel geometry, so the placement has to be
+delegated to it (see `mark-shot`'s `showFullScreenOnScreen`, which on Linux does
+only `setScreen` + `setGeometry(screen->geometry())` + `showFullScreen()`).
