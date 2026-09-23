@@ -4,6 +4,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusMetaType>
+#include <QUuid>
 #include <QDBusObjectPath>
 #include <QDBusVariant>
 #include <QEventLoop>
@@ -178,8 +179,10 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
             QString::fromLatin1(kShortcutsInterface), QStringLiteral("BindShortcuts"));
         // QDBusMessage cannot stream a QDBusArgument directly; a QVariant carries
         // it through the marshaller.
-        bind << QDBusObjectPath(m_sessionPath) << QVariant::fromValue(shortcutList)
-             << QString() << QVariantMap();
+        bind << QDBusObjectPath(m_sessionPath) << QVariant::fromValue(shortcutList) << QString()
+             << QVariantMap{{QStringLiteral("handle_token"),
+                             QStringLiteral("snow_shot_bind_%1")
+                                 .arg(QUuid::createUuid().toString(QUuid::Id128))}};
 
         QVariantMap results;
         if (!callAndAwait(bind, &results, &error)) {
@@ -229,13 +232,21 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
 
   private:
     bool ensureSession(QString* error) {
-        if (!m_sessionPath.isEmpty()) {
-            return true;
-        }
+        // Every registration gets its own session. Measured against the portal
+        // on this host: within one session only the first BindShortcuts is
+        // accepted and later ones come back with response 2, so sharing a
+        // session silently dropped every shortcut after the first.
         QDBusMessage create = QDBusMessage::createMethodCall(
             QString::fromLatin1(kPortalService), QString::fromLatin1(kPortalPath),
             QString::fromLatin1(kShortcutsInterface), QStringLiteral("CreateSession"));
-        create << QVariantMap();
+        // The portal names the session after a token from the options; with an
+        // empty map it has no token at all and aborts while initialising the
+        // session, which takes the whole portal down and leaves callers with
+        // "no reply" instead of an error they could report.
+        const QString sessionToken =
+            QStringLiteral("snow_shot_%1").arg(QUuid::createUuid().toString(QUuid::Id128));
+        create << QVariantMap{{QStringLiteral("handle_token"), sessionToken},
+                              {QStringLiteral("session_handle_token"), sessionToken}};
 
         QVariantMap results;
         if (!callAndAwait(create, &results, error)) {
