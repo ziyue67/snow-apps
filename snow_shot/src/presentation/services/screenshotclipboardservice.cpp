@@ -8,9 +8,13 @@
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QMimeData>
 #include <QPointer>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QTemporaryFile>
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
@@ -18,6 +22,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <optional>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -56,6 +61,58 @@ class PngClipboardMimeData final : public QMimeData {
     mutable QImage m_image;
 };
 #endif
+
+// A Wayland client only owns the selection while one of its own surfaces holds
+// the seat, so an overlay that publishes and then closes takes the clipboard
+// with it. Hand the bytes to a detached owner process instead, which keeps
+// offering them after this window is gone. mark-shot publishes the same way.
+struct ClipboardOwnerCommand final {
+    QString executable;
+    QString shellCommand;
+};
+
+std::optional<ClipboardOwnerCommand> clipboardOwnerCommand() {
+    const bool wayland =
+        qEnvironmentVariable("XDG_SESSION_TYPE").trimmed().toLower() == QLatin1String("wayland");
+    const QString executable = QStandardPaths::findExecutable(wayland ? QStringLiteral("wl-copy")
+                                                                      : QStringLiteral("xclip"));
+    if (executable.isEmpty()) {
+        return std::nullopt;
+    }
+
+    // $1 is the payload file and $2 the owner executable; --foreground keeps the
+    // owner alive so the selection survives this process leaving the seat.
+    const QString shellCommand =
+        wayland ? QStringLiteral("\"$2\" --foreground --type image/png < \"$1\"; rm -f \"$1\"")
+                : QStringLiteral("\"$2\" -selection clipboard -t image/png < \"$1\"; rm -f \"$1\"");
+    return ClipboardOwnerCommand{executable, shellCommand};
+}
+
+bool publishToClipboardOwner(const QByteArray& png, const ClipboardOwnerCommand& owner) {
+    QTemporaryFile tempFile(
+        QDir(QDir::tempPath()).filePath(QStringLiteral("snow-shot-clipboard-XXXXXX.png")));
+    tempFile.setAutoRemove(false);
+    if (!tempFile.open()) {
+        return false;
+    }
+    if (tempFile.write(png) != png.size()) {
+        const QString failedPath = tempFile.fileName();
+        tempFile.close();
+        QFile::remove(failedPath);
+        return false;
+    }
+
+    const QString payloadPath = tempFile.fileName();
+    tempFile.close();
+    const bool started =
+        QProcess::startDetached(QStringLiteral("sh"), {QStringLiteral("-c"), owner.shellCommand,
+                                                       QStringLiteral("snow-shot-clipboard"),
+                                                       payloadPath, owner.executable});
+    if (!started) {
+        QFile::remove(payloadPath);
+    }
+    return started;
+}
 
 constexpr int kMaximumCommitAttempts = 5;
 constexpr qint64 kMaximumCommitDurationMs = 300;
@@ -466,6 +523,12 @@ ScreenshotClipboardService::commit(QClipboard* clipboard, QObject* receiver,
         }
         auto* mime = new PngClipboardMimeData(sharedPayload->m_pngBytes);
         guardedClipboard->setMimeData(mime, QClipboard::Clipboard);
+        // Qt's own publication lives only as long as this process holds the
+        // seat, so also hand the bytes to a detached owner when one is
+        // available; that owner is what keeps the image pasteable afterwards.
+        if (const std::optional<ClipboardOwnerCommand> owner = clipboardOwnerCommand()) {
+            publishToClipboardOwner(sharedPayload->m_pngBytes, *owner);
+        }
         sharedPayload->reset();
         return ClipboardPublishAttempt{};
     };
