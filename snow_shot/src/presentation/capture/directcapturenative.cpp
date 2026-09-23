@@ -2,6 +2,10 @@
 #include "captureframeimage.h"
 #include "captureframegeometry.h"
 
+#ifdef Q_OS_LINUX
+#include "snow_shot/platform/portalscreenshot.h"
+#endif
+
 #include <memory>
 #include <QCoreApplication>
 #include <utility>
@@ -16,6 +20,22 @@ QString nativeError() {
 
 DirectCaptureFrame captureDirectTarget(const DirectCaptureRequest& request) {
     DirectCaptureFrame result;
+#ifdef Q_OS_LINUX
+    // A Wayland session has no readable X root window, so take the screenshot
+    // through the desktop portal instead of failing on the X11 backend.
+    if (snow_shot::platform::portalScreenshotRequired()) {
+        QString portalError;
+        const QImage image = snow_shot::platform::takePortalScreenshot(&portalError);
+        if (!image.isNull()) {
+            result.image = image;
+            result.physicalBounds = QRect(QPoint(0, 0), image.size());
+            result.identity = QStringLiteral("portal");
+            return result;
+        }
+        result.error = portalError;
+        return result;
+    }
+#endif
     if ((request.target == DirectCaptureTarget::FocusedWindow && request.window == 0) ||
         (request.target == DirectCaptureTarget::CurrentMonitor && request.monitorName.isEmpty())) {
         return result;
