@@ -39,6 +39,9 @@
 #include "snow_capture.h"
 #include "snow_recording.h"
 
+#include <climits>
+#include <unistd.h>
+
 #ifdef Q_OS_WIN
 #include <Windows.h>
 #endif
@@ -165,6 +168,16 @@ int main(int argc, char* argv[]) {
     const DWORD moduleLength = GetModuleFileNameW(nullptr, modulePath, 32768);
     if (moduleLength > 0 && moduleLength < 32768) {
         executablePath = QString::fromWCharArray(modulePath, static_cast<int>(moduleLength));
+    }
+#else
+    // argv[0] is only whatever the caller typed, so launching by bare name
+    // through PATH leaves no directory to look beside for the updater and the
+    // startup transaction check then fails. Ask the kernel where the binary is;
+    // QFileInfo reports the procfs entry as an ordinary file, so read the link.
+    char selfPath[PATH_MAX]{};
+    const ssize_t selfLength = ::readlink("/proc/self/exe", selfPath, sizeof(selfPath) - 1);
+    if (selfLength > 0) {
+        executablePath = QString::fromLocal8Bit(selfPath, static_cast<int>(selfLength));
     }
 #endif
     const QString updateRoot = updateInstallationRoot(QFileInfo(executablePath).absolutePath());
