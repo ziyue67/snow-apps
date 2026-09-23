@@ -225,6 +225,14 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
             return result;
         }
 
+        // A changed shortcut arrives as a fresh registration for an id that may
+        // already own a session. The portal has no unbind and refuses a trigger
+        // it still holds, so release the old session first: without this the new
+        // key is rejected and editing a shortcut looks like it does nothing.
+        if (m_sessionByShortcut.contains(shortcutIdFor(registrationId))) {
+            unregisterShortcut(registrationId);
+        }
+
         QString error;
         if (!ensureSession(&error)) {
             result.failureReason = GlobalShortcutFailureReason::UnsupportedPlatform;
