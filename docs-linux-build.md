@@ -446,3 +446,38 @@ Frameless `Qt::Tool` overlays cannot be positioned with `setGeometry()` on
 Wayland — the compositor owns toplevel geometry, so the placement has to be
 delegated to it (see `mark-shot`'s `showFullScreenOnScreen`, which on Linux does
 only `setScreen` + `setGeometry(screen->geometry())` + `showFullScreen()`).
+
+### Floating toolbar is oversized on a scaled display
+
+`ScreenshotFloatingToolPaletteWindow::fixedWindowSizeHint()` derives the window
+size from a preset multiplied by the palette's physical scale:
+
+```cpp
+constexpr QSize kToolbarWindowPresetSize(1242, 142);   // line 49
+
+QSize ScreenshotFloatingToolPaletteWindow::fixedWindowSizeHint() const {   // line 1254
+    const qreal scale = m_paletteHost != nullptr ? m_paletteHost->physicalScale() : 1.0;
+    return QSize(qMax(1, qRound(kToolbarWindowPresetSize.width() * scale)),
+                 qMax(1, qRound(kToolbarWindowPresetSize.height() * scale)));
+}
+```
+
+Qt sizes widgets in logical pixels, so multiplying a logical preset by the
+physical scale applies the scale twice on Wayland. With the panel at 200%
+(`physicalScale()` = `devicePixelRatio()` = 2) the palette asks for
+**2484x284 logical** on a desktop whose whole logical extent is only **960x540**
+— 2.6x the screen width, which is why the toolbar runs off the edge.
+
+`physicalScale()` is the backing-store scale (line 864 uses it that way); it is
+not a window-geometry factor.
+
+Two candidate corrections, neither verified on a scaled Wayland session yet:
+
+* Use the preset unchanged on Wayland. At 200% that is still 1242 logical
+  against a 960 logical desktop, so it mitigates but does not fix the overflow.
+* Divide by the scale on Wayland (`preset / physicalScale()`), i.e. treat the
+  preset as a physical size: 621x71 logical = 1242x142 physical, keeping the
+  same share of the screen as on a 1x display and fitting within 1920 physical.
+
+Confirm against a real 200% session before committing either, and check the
+Windows and macOS paths, which reach the same function.
