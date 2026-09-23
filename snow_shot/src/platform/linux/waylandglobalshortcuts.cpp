@@ -11,6 +11,7 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QGuiApplication>
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -165,12 +166,29 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
         // one leaves the rest behind: the portal keeps their shortcuts bound,
         // the next run cannot bind the same keys again, and the key presses go
         // to sessions nobody owns any more.
-        for (const QString& session : m_sessionPaths) {
-            QDBusMessage close = QDBusMessage::createMethodCall(
-                QString::fromLatin1(kPortalService), session,
-                QString::fromLatin1(kSessionInterface), QStringLiteral("Close"));
-            QDBusConnection::sessionBus().send(close);
+        // Iterate a copy: closeSession() drops the entry it closes.
+        const QStringList sessions = m_sessionPaths;
+        for (const QString& session : sessions) {
+            closeSession(session);
         }
+    }
+
+    // Ending a session is the portal's only way to release the triggers it holds,
+    // so both teardown and a re-bind go through here.
+    void closeSession(const QString& session) {
+        if (session.isEmpty()) {
+            return;
+        }
+        QDBusConnection::sessionBus().disconnect(
+            QString::fromLatin1(kPortalService), session, QString::fromLatin1(kShortcutsInterface),
+            QStringLiteral("Activated"), this,
+            SLOT(onActivated(QDBusObjectPath, QString, qulonglong, QVariantMap)));
+
+        QDBusMessage close = QDBusMessage::createMethodCall(
+            QString::fromLatin1(kPortalService), session, QString::fromLatin1(kSessionInterface),
+            QStringLiteral("Close"));
+        QDBusConnection::sessionBus().send(close);
+        m_sessionPaths.removeAll(session);
     }
 
     void setActivationHandler(ActivationHandler handler) override {
@@ -249,17 +267,27 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
         }
 
         m_activationByShortcut.insert(shortcutIdFor(registrationId), registrationId);
+        m_sessionByShortcut.insert(shortcutIdFor(registrationId), m_sessionPath);
         result.registered = true;
         result.failureReason = GlobalShortcutFailureReason::None;
         return result;
     }
 
     void unregisterShortcut(int registrationId) override {
-        // The portal has no unbind: the trigger stays bound to this session
-        // until it ends, so only the local mapping is dropped.
+        // The portal has no unbind, so the only way to release a trigger is to
+        // end the session that owns it. Dropping just the local mapping left the
+        // compositor still holding the key, and because each registration opens
+        // its own session the stale one stayed alive: re-binding the same key
+        // for a changed shortcut was refused as already taken, which is why
+        // editing a shortcut appeared to do nothing.
         const QString id = shortcutIdFor(registrationId);
         for (auto it = m_activationByShortcut.begin(); it != m_activationByShortcut.end();) {
             it = it.key() == id ? m_activationByShortcut.erase(it) : std::next(it);
+        }
+
+        const QString sessionPath = m_sessionByShortcut.take(id);
+        if (!sessionPath.isEmpty()) {
+            closeSession(sessionPath);
         }
     }
 
@@ -394,6 +422,9 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
     ActivationHandler m_handler;
     QString m_sessionPath;
     QStringList m_sessionPaths;
+    // Each registration owns a session, so a re-bind has to know which one to end
+    // to release the trigger it still holds.
+    QHash<QString, QString> m_sessionByShortcut;
     QEventLoop* m_loop = nullptr;
     bool m_awaiting = false;
     uint m_response = 2;
