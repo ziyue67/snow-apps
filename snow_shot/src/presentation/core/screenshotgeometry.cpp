@@ -753,6 +753,19 @@ CapturedDisplayModel ScreenshotGeometryMapper::preCaptureDisplayModel(QScreen& s
     display.canvasRect = display.physicalRect;
     display.screen = &screen;
     display.active = true;
+#if defined(Q_OS_LINUX)
+    // A Wayland compositor scales fractionally but reports a rounded device pixel
+    // ratio: a 125% desktop arrives as 1536x864 at ratio 2, so the physical rect
+    // derived from it claims 3072x1728 pixels while the frame the compositor
+    // hands over is 1920x1080. Mapping the capture through that invented extent
+    // lands every coordinate at the wrong place. The capture reports the real
+    // pixel size, so start the canvas in logical units the way the macOS path
+    // does and let the delivered frame set the physical extent.
+    if (QGuiApplication::platformName() == QLatin1String("wayland")) {
+        display.canvasRect = display.logicalRect;
+        display.canvasUsesPoints = true;
+    }
+#endif
 #ifdef Q_OS_MACOS
     // Selection can finish before image acquisition. Use the same display identity
     // and point-based canvas as the captured frame from the start of the session.
