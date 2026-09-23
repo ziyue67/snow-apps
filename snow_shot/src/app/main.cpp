@@ -383,5 +383,9 @@ int main(int argc, char* argv[]) {
         QApplication::arguments().contains(QStringLiteral("--show-main-window"))) {
         applicationController.showMainWindow();
     }
+    if (!QApplication::arguments().contains(QStringLiteral("--autostart")) &&
+        QApplication::arguments().contains(QStringLiteral("--screenshot"))) {
+        applicationController.handleLaunchRequest(QApplication::arguments());
+    }
     return QApplication::exec();
 }

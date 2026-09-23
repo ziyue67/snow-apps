@@ -667,6 +667,20 @@ class ApplicationController::Impl {
         return *directCaptureController;
     }
 
+    // A global shortcut installed through GNOME's own custom keybindings runs a
+    // command line instead of signalling this process, so the capture the tray
+    // starts has to be reachable from an argument as well.
+    void startScreenshotFromCommandLine() {
+        if (!allowPermissions(presentation::requiredPermissions(
+                presentation::GlobalShortcutAction::Screenshot, permissions.microphoneEnabled())))
+            return;
+        static_cast<void>(featureRouter.dispatch(FeatureFamily::Screenshot, [this]() {
+            if (ScreenshotController* controller = ensureScreenshotController()) {
+                controller->startCapture();
+            }
+        }));
+    }
+
     void showMainWindow() {
         ensureMainWindow().showAndActivate();
     }
@@ -798,6 +812,10 @@ void ApplicationController::showMainWindow() {
 
 void ApplicationController::handleLaunchRequest(const QStringList& arguments) {
     if (arguments.contains(QStringLiteral("--autostart"))) {
+        return;
+    }
+    if (arguments.contains(QStringLiteral("--screenshot"))) {
+        m_impl->startScreenshotFromCommandLine();
         return;
     }
     m_impl->showMainWindow();
