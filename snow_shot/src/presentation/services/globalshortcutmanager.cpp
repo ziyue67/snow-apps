@@ -76,10 +76,18 @@ QString gnomeAccelerator(const QString& portableText) {
 }
 
 QString gnomeCommandFor(GlobalShortcutAction action) {
-    if (action != GlobalShortcutAction::Screenshot) {
+    QString argument;
+    switch (action) {
+    case GlobalShortcutAction::Screenshot:
+        argument = QStringLiteral("--screenshot");
+        break;
+    case GlobalShortcutAction::ScreenshotCopy:
+        argument = QStringLiteral("--screenshot-copy");
+        break;
+    default:
         return {};
     }
-    return QStringLiteral("\"%1\" --screenshot").arg(QCoreApplication::applicationFilePath());
+    return QStringLiteral("\"%1\" %2").arg(QCoreApplication::applicationFilePath(), argument);
 }
 
 // Gate on the schema rather than on XDG_CURRENT_DESKTOP: a launch that does not

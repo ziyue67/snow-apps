@@ -384,7 +384,8 @@ int main(int argc, char* argv[]) {
         applicationController.showMainWindow();
     }
     if (!QApplication::arguments().contains(QStringLiteral("--autostart")) &&
-        QApplication::arguments().contains(QStringLiteral("--screenshot"))) {
+        (QApplication::arguments().contains(QStringLiteral("--screenshot")) ||
+         QApplication::arguments().contains(QStringLiteral("--screenshot-copy")))) {
         applicationController.handleLaunchRequest(QApplication::arguments());
     }
     return QApplication::exec();

@@ -681,6 +681,20 @@ class ApplicationController::Impl {
         }));
     }
 
+    // The same argument route for the action that copies straight to the
+    // clipboard, so a keybinding can reach it without opening the main window.
+    void startScreenshotCopyFromCommandLine() {
+        if (!allowPermissions(presentation::requiredPermissions(
+                presentation::GlobalShortcutAction::ScreenshotCopy,
+                permissions.microphoneEnabled())))
+            return;
+        static_cast<void>(featureRouter.dispatch(FeatureFamily::Screenshot, [this]() {
+            if (ScreenshotController* controller = ensureScreenshotController()) {
+                controller->captureAndCopySelection();
+            }
+        }));
+    }
+
     void showMainWindow() {
         ensureMainWindow().showAndActivate();
     }
@@ -812,6 +826,10 @@ void ApplicationController::showMainWindow() {
 
 void ApplicationController::handleLaunchRequest(const QStringList& arguments) {
     if (arguments.contains(QStringLiteral("--autostart"))) {
+        return;
+    }
+    if (arguments.contains(QStringLiteral("--screenshot-copy"))) {
+        m_impl->startScreenshotCopyFromCommandLine();
         return;
     }
     if (arguments.contains(QStringLiteral("--screenshot"))) {
