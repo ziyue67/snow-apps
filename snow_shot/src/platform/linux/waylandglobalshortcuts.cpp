@@ -111,9 +111,13 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
     explicit WaylandGlobalShortcutBackend(QObject* parent = nullptr) : QObject(parent) {}
 
     ~WaylandGlobalShortcutBackend() override {
-        if (!m_sessionPath.isEmpty()) {
+        // Every registration opens its own session, so closing only the newest
+        // one leaves the rest behind: the portal keeps their shortcuts bound,
+        // the next run cannot bind the same keys again, and the key presses go
+        // to sessions nobody owns any more.
+        for (const QString& session : m_sessionPaths) {
             QDBusMessage close = QDBusMessage::createMethodCall(
-                QString::fromLatin1(kPortalService), m_sessionPath,
+                QString::fromLatin1(kPortalService), session,
                 QString::fromLatin1(kSessionInterface), QStringLiteral("Close"));
             QDBusConnection::sessionBus().send(close);
         }
@@ -259,6 +263,7 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
             }
             return false;
         }
+        m_sessionPaths.append(m_sessionPath);
         return QDBusConnection::sessionBus().connect(
             QString::fromLatin1(kPortalService), m_sessionPath,
             QString::fromLatin1(kShortcutsInterface), QStringLiteral("Activated"), this,
@@ -330,6 +335,7 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
 
     ActivationHandler m_handler;
     QString m_sessionPath;
+    QStringList m_sessionPaths;
     QEventLoop* m_loop = nullptr;
     bool m_awaiting = false;
     uint m_response = 2;
