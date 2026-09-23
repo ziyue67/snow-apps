@@ -358,6 +358,15 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
             return false;
         }
         m_sessionPaths.append(m_sessionPath);
+        // mark-shot subscribes to Activated on the portal's desktop path rather
+        // than on the session object, and that is the path this portal emits it
+        // from. Subscribe to both so an activation is not missed whichever one
+        // the running portal chooses; onActivated ignores the session argument.
+        static const auto activationSubscribed = QDBusConnection::sessionBus().connect(
+            QString::fromLatin1(kPortalService), QString::fromLatin1(kPortalPath),
+            QString::fromLatin1(kShortcutsInterface), QStringLiteral("Activated"), this,
+            SLOT(onActivated(QDBusObjectPath, QString, qulonglong, QVariantMap)));
+        Q_UNUSED(activationSubscribed);
         return QDBusConnection::sessionBus().connect(
             QString::fromLatin1(kPortalService), m_sessionPath,
             QString::fromLatin1(kShortcutsInterface), QStringLiteral("Activated"), this,
