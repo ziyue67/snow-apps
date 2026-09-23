@@ -2,12 +2,15 @@
 
 #include <QDBusArgument>
 #include <QDBusConnection>
+#include <QDBusError>
 #include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QUuid>
 #include <QDBusObjectPath>
 #include <QDBusVariant>
 #include <QEventLoop>
+#include <QFile>
+#include <QGuiApplication>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -17,6 +20,7 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 
 namespace snow_shot::presentation {
 
@@ -58,6 +62,52 @@ constexpr auto kPortalPath = "/org/freedesktop/portal/desktop";
 constexpr auto kShortcutsInterface = "org.freedesktop.portal.GlobalShortcuts";
 constexpr auto kRequestInterface = "org.freedesktop.portal.Request";
 constexpr auto kSessionInterface = "org.freedesktop.portal.Session";
+constexpr auto kHostRegistryInterface = "org.freedesktop.host.portal.Registry";
+
+// A Wayland compositor only brokers global shortcuts for a caller it can
+// identify, and it learns that identity here: the portal associates the bus
+// connection with the desktop file naming this process. mark-shot registers the
+// same way before it opens a shortcut session, and without it the shortcut
+// session is created for an unresolved application, so the compositor never
+// routes the key press back and the binding silently does nothing.
+void registerHostPortalApplication() {
+    static std::once_flag once;
+    std::call_once(once, [] {
+        // Sandboxed builds already carry an identity the portal trusts.
+        if (QFile::exists(QStringLiteral("/.flatpak-info")) || qEnvironmentVariableIsSet("SNAP")) {
+            return;
+        }
+
+        const QString desktopFileName = QGuiApplication::desktopFileName();
+        if (desktopFileName.isEmpty()) {
+            return;
+        }
+
+        QDBusMessage message = QDBusMessage::createMethodCall(
+            QString::fromLatin1(kPortalService), QString::fromLatin1(kPortalPath),
+            QString::fromLatin1(kHostRegistryInterface), QStringLiteral("Register"));
+        message << desktopFileName << QVariantMap();
+
+        const QDBusMessage reply = QDBusConnection::sessionBus().call(message, QDBus::Block, 3000);
+        if (reply.type() != QDBusMessage::ErrorMessage) {
+            return;
+        }
+
+        // Older portals predate the interface and report the association as a
+        // failure; neither is worth surfacing, the shortcut path still works.
+        const QDBusError error(reply);
+        if (error.type() == QDBusError::UnknownInterface ||
+            error.type() == QDBusError::UnknownMethod) {
+            return;
+        }
+        if (error.name() == QStringLiteral("org.freedesktop.portal.Error.Failed") &&
+            error.message().contains(QStringLiteral("Connection already associated"))) {
+            return;
+        }
+        qWarning("global-shortcut portal registration failed: %s",
+                 error.message().toUtf8().constData());
+    });
+}
 
 // Portal results carry `a{sv}`, so a value can arrive either as a plain string
 // or wrapped in a variant depending on how the sender typed it.
@@ -137,13 +187,13 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
         const QString trigger = portalTrigger(binding.portableText);
         const bool shaped = !trigger.isEmpty() && trigger.contains(QLatin1Char('+'));
         result.supported = shaped;
-        result.failureReason =
-            shaped ? GlobalShortcutFailureReason::None : GlobalShortcutFailureReason::InvalidShortcut;
+        result.failureReason = shaped ? GlobalShortcutFailureReason::None
+                                      : GlobalShortcutFailureReason::InvalidShortcut;
         return result;
     }
 
-    GlobalShortcutBackendResult registerShortcut(int registrationId,
-                                                 const shortcuts::ShortcutBinding& binding) override {
+    GlobalShortcutBackendResult
+    registerShortcut(int registrationId, const shortcuts::ShortcutBinding& binding) override {
         GlobalShortcutBackendResult result;
         QDBusConnection bus = QDBusConnection::sessionBus();
         if (!bus.isConnected()) {
@@ -167,15 +217,19 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
         // allows binding incrementally on an existing session.
         // The declared type must be known to the marshaller; registering once is
         // enough, and the function-local static keeps it off the hot path.
-        static const auto portalShortcutRegistered =
-            qDBusRegisterMetaType<PortalShortcut>();
+        static const auto portalShortcutRegistered = qDBusRegisterMetaType<PortalShortcut>();
         Q_UNUSED(portalShortcutRegistered);
         QDBusArgument shortcutList;
         shortcutList.beginArray(qMetaTypeId<PortalShortcut>());
         shortcutList << PortalShortcut{
             shortcutIdFor(registrationId),
+            // `preferred_trigger` is the only field the portal reads as the key to
+            // grab; `trigger_description` merely labels it for display. Sending the
+            // description alone made the compositor accept the bind while binding no
+            // trigger at all: it answered ShortcutsChanged with an empty list and
+            // never delivered Activated, so every shortcut was silently dead.
             QVariantMap{{QStringLiteral("description"), binding.portableText},
-                        {QStringLiteral("trigger_description"), trigger}}};
+                        {QStringLiteral("preferred_trigger"), trigger}}};
         shortcutList.endArray();
 
         QDBusMessage bind = QDBusMessage::createMethodCall(
@@ -219,8 +273,8 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
         }
     }
 
-    void onActivated(const QDBusObjectPath& session, const QString& shortcutId, qulonglong timestamp,
-                     const QVariantMap& options) {
+    void onActivated(const QDBusObjectPath& session, const QString& shortcutId,
+                     qulonglong timestamp, const QVariantMap& options) {
         Q_UNUSED(session);
         Q_UNUSED(timestamp);
         Q_UNUSED(options);
@@ -236,6 +290,10 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
 
   private:
     bool ensureSession(QString* error) {
+        // Identify this process to the portal before opening a shortcut session,
+        // so the compositor attributes the bindings to this application.
+        registerHostPortalApplication();
+
         // Every registration gets its own session. Measured against the portal
         // on this host: within one session only the first BindShortcuts is
         // accepted and later ones come back with response 2, so sharing a
@@ -299,10 +357,10 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
         m_loop = &loop;
         m_awaiting = true;
         m_response = 2;
-        const bool subscribed = bus.connect(
-            QString::fromLatin1(kPortalService), requestPath,
-            QString::fromLatin1(kRequestInterface), QStringLiteral("Response"), this,
-            SLOT(onRequestResponse(uint, QVariantMap)));
+        const bool subscribed =
+            bus.connect(QString::fromLatin1(kPortalService), requestPath,
+                        QString::fromLatin1(kRequestInterface), QStringLiteral("Response"), this,
+                        SLOT(onRequestResponse(uint, QVariantMap)));
         if (!subscribed) {
             m_loop = nullptr;
             if (error != nullptr) {
@@ -348,6 +406,5 @@ std::unique_ptr<GlobalShortcutBackend> createWaylandGlobalShortcutBackend() {
 }
 
 } // namespace snow_shot::presentation
-
 
 #include "waylandglobalshortcuts.moc"
