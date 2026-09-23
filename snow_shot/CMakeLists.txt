@@ -6773,6 +6773,14 @@ if(UNIX AND NOT APPLE)
     install(DIRECTORY "${_snow_shot_qt_prefix}/plugins/platforms"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/snow-shot/plugins"
     )
+    # The wayland platform plugin refuses to load without a shell integration,
+    # and those live in their own plugin directory rather than beside it, so the
+    # package has to carry them too or Wayland sessions cannot start the app.
+    if(EXISTS "${_snow_shot_qt_prefix}/plugins/wayland-shell-integration")
+        install(DIRECTORY "${_snow_shot_qt_prefix}/plugins/wayland-shell-integration"
+            DESTINATION "${CMAKE_INSTALL_LIBDIR}/snow-shot/plugins"
+        )
+    endif()
     # $ORIGIN covers libraries staged next to the binary, ../lib covers the codec
     # backend and ../lib/snow-shot/lib the bundled Qt runtime. The Qt platform
     # plugins carry a $ORIGIN/../../lib runpath, which resolves to the same

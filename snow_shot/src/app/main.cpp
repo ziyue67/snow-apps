@@ -278,6 +278,11 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+    // The desktop portal identifies callers by application id, which on Wayland
+    // Qt takes from the desktop file name; without it GlobalShortcuts answers
+    // "An app id is required" and the compositor never sees a shortcut.
+    QGuiApplication::setDesktopFileName(QStringLiteral("com.snowshot.snow_shot"));
+
     QApplication app(argc, argv);
     snow_shot::diagnostics::logEvent(QStringLiteral("snow_shot.app"),
                                      QStringLiteral("application.platform"),
