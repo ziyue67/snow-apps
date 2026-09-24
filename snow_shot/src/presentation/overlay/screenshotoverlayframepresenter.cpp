@@ -186,7 +186,11 @@ void ScreenshotOverlayFramePresenter::warmPresentationSurface() {
     SNOW_SHOT_CAPTURE_PERF_MILESTONE("presentation.window.surface_warm.redraw_suppressed");
     {
         SNOW_SHOT_CAPTURE_PERF_SCOPE("presentation.window.surface_warm.show");
-        m_window.show();
+        if (!qEnvironmentVariable("WAYLAND_DISPLAY").isEmpty()) {
+            m_window.showFullScreen();
+        } else {
+            m_window.show();
+        }
     }
     SNOW_SHOT_CAPTURE_PERF_MILESTONE("presentation.window.surface_warm.show_returned");
     paintSuppression.restoreNativeRedraw();
@@ -231,7 +235,11 @@ void ScreenshotOverlayFramePresenter::presentPreparedFrame(bool deferFirstPaint)
     SNOW_SHOT_CAPTURE_PERF_MILESTONE("presentation.window.redraw_suppressed");
     if (!alreadyVisible) {
         SNOW_SHOT_CAPTURE_PERF_SCOPE("presentation.window.show");
-        m_window.show();
+        if (!qEnvironmentVariable("WAYLAND_DISPLAY").isEmpty()) {
+            m_window.showFullScreen();
+        } else {
+            m_window.show();
+        }
     }
     SNOW_SHOT_CAPTURE_PERF_MILESTONE("presentation.window.show_returned");
     paintSuppression.restoreNativeRedraw();
@@ -284,7 +292,11 @@ void ScreenshotOverlayFramePresenter::presentFramePaced() {
     // frame while the queued first paint interleaves with drag input.
     {
         SNOW_SHOT_CAPTURE_PERF_SCOPE("presentation.window.show");
-        m_window.show();
+        if (!qEnvironmentVariable("WAYLAND_DISPLAY").isEmpty()) {
+            m_window.showFullScreen();
+        } else {
+            m_window.show();
+        }
     }
     SNOW_SHOT_CAPTURE_PERF_MILESTONE("presentation.window.frame_paced_shown");
 }

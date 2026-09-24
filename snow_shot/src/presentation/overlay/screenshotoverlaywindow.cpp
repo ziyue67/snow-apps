@@ -49,7 +49,13 @@ qint64 paintRegionArea(const QRegion& region) {
 ScreenshotOverlayWindow::ScreenshotOverlayWindow(ScreenshotOverlayEventSink& eventSink,
                                                  SnowCanvasWidget* canvas, QWidget* parent)
     : QWidget(parent), m_eventSink(eventSink), m_canvas(canvas) {
-    setWindowFlags(Qt::FramelessWindowHint | Qt::Tool | Qt::WindowStaysOnTopHint);
+    // A Wayland toplevel cannot be positioned by the client: the compositor keeps
+    // the top bar and dock above it and clips it to the work area, so the mask never
+    // reaches the screen edges. Qt::Tool cannot be made fullscreen, so on Wayland the
+    // overlay is a normal window that is shown fullscreen instead.
+    const bool waylandSession = !qEnvironmentVariable("WAYLAND_DISPLAY").isEmpty();
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint |
+                   (waylandSession ? Qt::Window : Qt::Tool));
     setAttribute(Qt::WA_DeleteOnClose, false);
     setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_NoSystemBackground, true);
