@@ -308,6 +308,7 @@ fn backend_name(kind: CaptureBackendKind) -> &'static str {
         CaptureBackendKind::Gdi => "gdi",
         CaptureBackendKind::ScreenCaptureKit => "sck",
         CaptureBackendKind::X11 => "x11",
+        CaptureBackendKind::Portal => "portal",
     }
 }
 
@@ -320,6 +321,7 @@ fn parse_backend(token: &str) -> Option<CaptureBackendKind> {
         "gdi" => Some(CaptureBackendKind::Gdi),
         "sck" => Some(CaptureBackendKind::ScreenCaptureKit),
         "x11" => Some(CaptureBackendKind::X11),
+        "portal" | "wayland" => Some(CaptureBackendKind::Portal),
         "auto" => Some(CaptureBackendKind::Auto),
         _ => None,
     }

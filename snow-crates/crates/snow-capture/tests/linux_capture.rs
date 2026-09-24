@@ -9,22 +9,38 @@
 //! ```
 #![cfg(target_os = "linux")]
 
+use snow_capture::CaptureTarget;
 use snow_capture::backend::CaptureBackendKind;
 use snow_capture::capabilities::CaptureCapabilities;
 use snow_capture::frame::CapturePixelFormat;
 use snow_capture::system::{CaptureOptions, CaptureSystem};
-use snow_capture::CaptureTarget;
+use snow_media::PixelFormat;
 
 /// Capability discovery must not depend on a display: report the backend the
 /// platform actually provides even when no connection can be opened.
 #[test]
-fn advertises_the_x11_backend() {
+fn advertises_the_backend_for_the_session() {
     let capabilities = CaptureCapabilities::current();
     if wayland_session() {
-        // Offering the X11 backend here would promise frames that cannot be read.
+        // The X root window is XWayland's and holds no screen content, so the
+        // desktop comes from the portal's screen cast over PipeWire.
+        assert_eq!(
+            capabilities.backends,
+            vec![CaptureBackendKind::Portal],
+            "a Wayland session captures through the portal screen cast"
+        );
+        assert_eq!(
+            capabilities.cpu_formats,
+            vec![PixelFormat::Bgra8],
+            "the PipeWire consumer converts every negotiated format to BGRA"
+        );
         assert!(
-            capabilities.backends.is_empty() && capabilities.cpu_formats.is_empty(),
-            "a Wayland session must not advertise X11 capture"
+            !capabilities.native_frames,
+            "the frames arrive in CPU memory rather than as native surfaces"
+        );
+        assert!(
+            !capabilities.window_enumeration,
+            "window capture is not implemented on Wayland yet"
         );
         return;
     }
@@ -96,8 +112,14 @@ fn captures_a_frame_matching_the_screen_geometry() {
     }
     let system = CaptureSystem::builder().build().expect("system builds");
     let layout = system.monitor_layout().expect("layout resolves");
-    assert_eq!(layout.virtual_width, 320, "virtual width matches the screen");
-    assert_eq!(layout.virtual_height, 240, "virtual height matches the screen");
+    assert_eq!(
+        layout.virtual_width, 320,
+        "virtual width matches the screen"
+    );
+    assert_eq!(
+        layout.virtual_height, 240,
+        "virtual height matches the screen"
+    );
 
     // X11 hands back BGRA, and the backend rejects any other request, so the
     // session has to ask for the format the backend produces.

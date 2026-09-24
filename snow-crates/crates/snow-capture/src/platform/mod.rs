@@ -120,6 +120,12 @@ pub(crate) fn build_backend_for_mode(
     _auto_policy_is_explicit: bool,
     _mode: CaptureMode,
 ) -> crate::error::CaptureResult<Arc<dyn CaptureBackend>> {
+    // A Wayland session has no readable X screen — the root window belongs to
+    // XWayland — so the desktop comes from the portal's screen cast instead.
+    // X11 stays the backend whenever the session is not Wayland.
+    if linux::wayland_session() {
+        return Ok(Arc::new(linux_portal::PortalBackend::new()));
+    }
     Ok(Arc::new(linux::X11Backend))
 }
 
@@ -127,6 +133,10 @@ pub(crate) fn build_backend_for_mode(
 pub(crate) fn monitor_layout_from_monitors(
     _monitors: Vec<crate::monitor::MonitorId>,
 ) -> crate::error::CaptureResult<MonitorLayout> {
+    // Monitor geometry under Wayland is only published by the portal screen
+    // cast, which the backend that owns the session reports; this helper has no
+    // session to ask, so it keeps the X11 description as an approximation.
+    // Callers that need the desktop geometry ask the backend instead.
     linux::layout()
 }
 

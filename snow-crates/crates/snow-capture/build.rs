@@ -16,7 +16,10 @@ fn main() {
         // The portal screen cast backend goes through libportal, which pulls in
         // the GLib stack, so ask pkg-config how those are linked here.
         for library in ["libportal", "gio-2.0", "gobject-2.0", "glib-2.0"] {
-            let Ok(output) = Command::new("pkg-config").args(["--libs", library]).output() else {
+            let Ok(output) = Command::new("pkg-config")
+                .args(["--libs", library])
+                .output()
+            else {
                 continue;
             };
             if !output.status.success() {

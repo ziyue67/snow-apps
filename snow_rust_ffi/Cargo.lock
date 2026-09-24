@@ -67,6 +67,7 @@ dependencies = [
  "futures-util",
  "getrandom",
  "serde",
+ "serde_repr",
  "zbus",
 ]
 
@@ -1650,6 +1651,7 @@ dependencies = [
  "anyhow",
  "ashpd",
  "crossbeam-channel",
+ "futures-lite",
  "half",
  "nalgebra",
  "num_cpus",

@@ -37,6 +37,8 @@ typedef enum SnowCaptureBackendKind {
     SNOW_CAPTURE_BACKEND_GDI = 3,
     SNOW_CAPTURE_BACKEND_SCREEN_CAPTURE_KIT = 4,
     SNOW_CAPTURE_BACKEND_X11 = 5,
+    /* Wayland, through the XDG desktop portal screen cast and PipeWire. */
+    SNOW_CAPTURE_BACKEND_PORTAL = 6,
 } SnowCaptureBackendKind;
 
 typedef enum SnowCaptureWgcUpdateMode {

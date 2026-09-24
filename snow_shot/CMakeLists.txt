@@ -6551,6 +6551,11 @@ unset(_SNOW_SHOT_SAVED_PKG_CONFIG_PATH)
             # XInput2 is the same story: the pointer backend binds libXi, so the
             # requirement has to be named here for the final link to satisfy it.
             target_link_libraries(snow_shot_rust_ffi_bundle INTERFACE X11 Xi)
+            # The Wayland capture backend reads the compositor's screen cast
+            # over PipeWire, and the pipewire crate binds libpipewire directly,
+            # so the same rule applies to it.
+            pkg_check_modules(SNOW_SHOT_PIPEWIRE REQUIRED IMPORTED_TARGET GLOBAL libpipewire-0.3)
+            target_link_libraries(snow_shot_rust_ffi_bundle INTERFACE PkgConfig::SNOW_SHOT_PIPEWIRE)
         endif()
     endif()
     target_link_libraries(snow_shot PRIVATE PkgConfig::SNOW_SHOT_FFMPEG)

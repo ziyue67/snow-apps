@@ -476,6 +476,7 @@ fn parse_capture_backend(value: u8) -> Result<CaptureBackendKind, String> {
         3 => Ok(CaptureBackendKind::Gdi),
         4 => Ok(CaptureBackendKind::ScreenCaptureKit),
         5 => Ok(CaptureBackendKind::X11),
+        6 => Ok(CaptureBackendKind::Portal),
         _ => Err(format!("invalid capture backend: {value}")),
     }
 }
@@ -503,6 +504,7 @@ fn capture_backend_value(kind: CaptureBackendKind) -> u8 {
         CaptureBackendKind::Gdi => 3,
         CaptureBackendKind::ScreenCaptureKit => 4,
         CaptureBackendKind::X11 => 5,
+        CaptureBackendKind::Portal => 6,
     }
 }
 

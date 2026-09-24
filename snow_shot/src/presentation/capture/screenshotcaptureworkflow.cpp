@@ -9,6 +9,7 @@
 #include "snow_shot/presentation/screenshotintelligentselectionmodel.h"
 #include "snow_shot/presentation/screenshotinteractionstate.h"
 #include "snow_shot/presentation/screenshotselectionmodel.h"
+#include "snow_shot/platform/portalscreenshot.h"
 
 #include <QCursor>
 #include <QDebug>
@@ -60,6 +61,13 @@ void ScreenshotCaptureWorkflow::prewarmResources() {
         return;
     }
     if (m_state.sessionState == ScreenshotSessionState::IdlePrepared) {
+        return;
+    }
+    // Preparing the native session means opening the compositor's capture path,
+    // and on Wayland that path is the portal: opening it here would put the
+    // screen picker in front of the user at startup. The session is prepared on
+    // the first capture instead, which is when the user expects to be asked.
+    if (snow_shot::platform::portalScreenshotRequired()) {
         return;
     }
 

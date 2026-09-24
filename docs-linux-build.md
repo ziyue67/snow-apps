@@ -284,19 +284,54 @@ neither check needs a display.
 ## Wayland capture
 
 A Wayland session cannot be read through X11: the X root window belongs to
-XWayland and holds no screen content, so `XGetImage` returns blank frames. The
-capture worker therefore asks
-`org.freedesktop.portal.Screenshot` when `WAYLAND_DISPLAY` is set
-(`src/platform/linux/portalscreenshot.cpp`), waits for the request object's
-`Response` signal, and turns the returned image into the captured display. The
-portal result arrives asynchronously — the method only returns a request handle —
-so the signal is subscribed to before waiting, and when the portal refuses or the
-user dismisses the prompt its own reason is reported.
+XWayland and holds no screen content, so `XGetImage` returns blank frames. Two
+paths cover the session instead.
 
-Verifying it needs a portal, which a container does not have, so the D-Bus
-exchange is covered separately from the session itself:
+**The screen cast backend** (`snow-crates/crates/snow-capture/src/platform/linux_portal.rs`)
+is what the capture layer uses. `platform/mod.rs` selects it whenever
+`WAYLAND_DISPLAY` is set, and it works the way mark-shot does:
+
+- `ashpd` opens `org.freedesktop.portal.ScreenCast`: the application id
+  (`com.snowshot.snow_shot`) is registered with the host portal registry first,
+  because the portal refuses an unidentified caller, then `CreateSession`,
+  `SelectSources` (monitors, embedded cursor, multiple sources allowed) and
+  `Start` run in order. The compositor shows its own picker the first time, and
+  `persist_mode` plus the restore token it returns are what let a later session
+  start without asking again; the token is kept under
+  `XDG_STATE_HOME/snow-shot/portal-screencast-token` (override with
+  `SNOW_CAPTURE_PORTAL_TOKEN_FILE`).
+- The session's streams each carry the compositor's `position` and `size` in
+  physical pixels. That is the geometry the backend reports, so `monitor_layout`
+  and the per-display rectangles line up with the pixels the frames contain —
+  unlike the single whole-desktop image the `Screenshot` portal returns.
+- `OpenPipeWireRemote` hands back a file descriptor, and
+  `platform/linux_portal/pipewire_stream.rs` reads it on its own thread: one
+  input stream per portal stream, addressed by node id, negotiating 8-bit RGB
+  (`BGRx` first) and asking for buffers sized for the negotiated stride. Every
+  frame is converted to BGRA and kept as the stream's newest, so a capture is a
+  hand-off rather than a fresh round trip.
+- The session is opened on the first capture and released after 30 s without
+  one (`IDLE_TIMEOUT`), because the compositor keeps a screen-sharing indicator
+  up while a cast runs.
+
+Because opening the session is what puts the compositor's picker on screen,
+`ScreenshotCaptureWorkflow::prewarmResources()` does not prepare the native
+session on Wayland: the session is prepared on the first capture instead, which
+is when the user expects to be asked. The X11 path still prewarms as before.
+
+**The screenshot portal** (`src/platform/linux/portalscreenshot.cpp`) remains as
+a fallback for a session whose screen cast is refused: the capture worker asks
+`org.freedesktop.portal.Screenshot` when the native capture fails on Wayland,
+waits for the request object's `Response` signal, and turns the returned image
+into the captured display. The portal result arrives asynchronously — the method
+only returns a request handle — so the signal is subscribed to before waiting,
+and when the portal refuses or the user dismisses the prompt its own reason is
+reported.
+
+Fixture coverage:
 
 ```bash
+# The portal round trip and the capture-worker fallback, against a mock portal.
 cmake --preset snow-shot-linux-x64-debug
 cmake --build --preset build-snow-shot-linux-x64-debug \
     --target snow-shot-portal-screenshot-tests
@@ -304,10 +339,13 @@ dbus-run-session -- bash -c \
     "python3 snow_shot/tests/mock_portal.py & sleep 2; \
      SNOW_SHOT_TEST_PORTAL=1 \
      ./build/snow-shot-linux-x64-debug/snow_shot/test-bin/snow-shot-portal-screenshot-tests"
+
+# The PipeWire consumer's format conversion, geometry mapping and layout.
+cd snow-crates && cargo test -p snow-capture --lib
 ```
 
 `tests/mock_portal.py` serves the same interface on a private bus and answers
-with a generated PNG, so the round-trip is reproducible without a desktop
+with a generated PNG, so the round trip is reproducible without a desktop
 session. Two traps it documents: the `Response` signal has to be declared on a
 class instantiated at the request path, and the well-known name has to stay
 referenced or it is released and the call reaches the real portal instead.
@@ -319,8 +357,20 @@ reachable rather than poisoning `DBUS_SESSION_BUS_ADDRESS`, because
 `QDBusConnection` caches its session connection and a forced failure would leave
 that broken connection cached for the rest of the process.
 
-Not covered: taking a screenshot in a real Wayland session. That still needs a
-desktop to confirm.
+The screen cast path needs a real compositor, so it is exercised with an
+example rather than a test. `SNOW_CAPTURE_PORTAL_DEBUG=1` prints what the stream
+negotiates and how many frames arrive, which is what separates "the portal never
+started a cast" from "the cast started and the buffers never arrived":
+
+```bash
+cd snow-crates
+cargo run -p snow-capture --example portal_screenshot -- /tmp/portal.png
+```
+
+Measured on this host (GNOME on Wayland, Qt 6.11.1, `eDP-1` at 1920x1080): the
+picker was answered once, the stream negotiated `BGRx 1920x1080`, the first
+frame arrived 182 ms after the capture request, and `portal_screenshot` wrote a
+1920x1080 PNG that matches the desktop.
 
 ## Known limitations
 
@@ -328,20 +378,19 @@ The Linux port currently covers the build system, the platform shims and the
 packaging path. The following behaviour is not implemented yet and is tracked as
 follow-up work:
 
-- **Screen capture scope.** Whole-screen capture works; per-monitor enumeration
-  and window capture do not, so `inspect_window` and `create_window_capturer`
-  report an unsupported-platform error. Multi-head setups are seen as one
-  monitor covering the X screen, and the portal reports the whole desktop as a
-  single display. A Wayland session goes through `org.freedesktop.portal.Screenshot`
-  (see above) rather than X11.
+- **Screen capture scope.** Whole-screen capture works on both sessions:
+  X11 reads the root window, and a Wayland session reads the compositor's screen
+  cast over PipeWire (see above). Per-monitor enumeration and window capture are
+  still missing, so `inspect_window` and `create_window_capturer`
+  report an unsupported-platform error, and multi-head setups are seen as one
+  monitor covering the X screen on X11. On Wayland the portal reports each
+  selected output separately, with the compositor's geometry.
   `CaptureCapabilities::current()` reports the X11 backend with BGRA CPU frames
-  on Linux, and advertises neither native frames nor window enumeration, so the
-  application sees exactly what the backend provides. It still advertises
-  nothing on a Wayland session, because the capabilities probe has not been
-  taught about the portal path yet, and the direct-capture entry point
-  (`captureDirectTarget`) has no portal fallback either: the portal returns the
-  whole desktop, which cannot satisfy a focused-window request and only
-  approximates a single monitor on a mixed-DPI multi-head setup.
+  on an X11 session and the portal backend with BGRA CPU frames on Wayland, and
+  advertises neither native frames nor window enumeration, so the application
+  sees exactly what the backend provides. The direct-capture entry point
+  (`captureDirectTarget`) still has no portal fallback: the screen cast shares
+  whole outputs, which cannot satisfy a focused-window request.
 - **Tray icon warning.** Starting the packaged build prints
   `QObject::connect: No such signal QPlatformNativeInterface::systemTrayWindowChanged(QScreen*)`.
   The string lives only in Qt's own `libQt6Widgets.so.6` (three occurrences) and

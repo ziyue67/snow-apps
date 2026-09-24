@@ -55,14 +55,14 @@ impl CaptureCapabilities {
         #[cfg(target_os = "linux")]
         {
             // Under Wayland the X root window belongs to XWayland and has no
-            // screen content, so the X11 backend cannot capture. Advertise no
-            // backend until the XDG Desktop Portal path exists, instead of
-            // offering one that returns blank frames.
+            // screen content, so the desktop is read through the portal's
+            // screen cast: the compositor publishes each selected monitor over
+            // PipeWire and the frames arrive as CPU-visible BGRA.
             if crate::platform::linux::wayland_session() {
                 return Self {
-                    backends: vec![],
+                    backends: vec![CaptureBackendKind::Portal],
                     desktop_space: DesktopSpace::PhysicalPixels,
-                    cpu_formats: vec![],
+                    cpu_formats: vec![PixelFormat::Bgra8],
                     native_frames: false,
                     hdr_capture: false,
                     window_enumeration: false,

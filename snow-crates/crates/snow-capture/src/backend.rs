@@ -57,6 +57,9 @@ pub enum CaptureBackendKind {
     ScreenCaptureKit,
 
     X11,
+
+    /// Wayland, through the XDG desktop portal's screen cast and PipeWire.
+    Portal,
 }
 
 impl CaptureBackendKind {
@@ -68,6 +71,7 @@ impl CaptureBackendKind {
             Self::Gdi => "gdi",
             Self::ScreenCaptureKit => "sck",
             Self::X11 => "x11",
+            Self::Portal => "portal",
         }
     }
 }
