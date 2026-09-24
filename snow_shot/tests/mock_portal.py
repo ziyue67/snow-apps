@@ -31,7 +31,10 @@ SHORTCUTS_IFACE = "org.freedesktop.portal.GlobalShortcuts"
 REQUEST_IFACE = "org.freedesktop.portal.Request"
 SESSION_IFACE = "org.freedesktop.portal.Session"
 
-SESSION_PATH = PORTAL_PATH + "/session/mock/1"
+def session_path(index):
+    """Each CreateSession gets its own path, as the portal does in practice."""
+
+    return "%s/session/mock/%d" % (PORTAL_PATH, index)
 
 # The image the screenshot round-trip expects back.
 IMAGE_WIDTH = 1
@@ -75,8 +78,10 @@ class Session(dbus.service.Object):
 
     @dbus.service.method(SESSION_IFACE, in_signature="", out_signature="")
     def Close(self):
+        # Closing one session must not take the portal down: a caller that
+        # rebinds a shortcut closes the session it replaced and then opens the
+        # next one, and the mock has to still be there for it.
         print("mock portal: session closed", flush=True)
-        GLib.idle_add(lambda: (print("mock portal: exiting", flush=True), sys.exit(0)))
 
 
 class Portal(dbus.service.Object):
@@ -87,6 +92,13 @@ class Portal(dbus.service.Object):
         # The client subscribes to whatever request path the method returned, so
         # each call gets its own and the answer cannot land on the wrong one.
         self._requests = 0
+        # Every shortcut registration opens its own session, and an activation
+        # has to be accepted from any of them.
+        self._session_count = 0
+        # The session objects have to stay referenced: the portal keeps a session
+        # open by exposing it, and registering the same path twice is an error.
+        self._sessions = {}
+        self._pending = []
 
     def _next_request_path(self):
         self._requests += 1
@@ -111,11 +123,13 @@ class Portal(dbus.service.Object):
     @dbus.service.method(SHORTCUTS_IFACE, in_signature="a{sv}", out_signature="o")
     def CreateSession(self, options):
         request_path = self._next_request_path()
+        self._session_count += 1
+        session = session_path(self._session_count)
+        # The session object has to exist before an activation can come from it.
+        self._sessions[session] = Session(self._connection, session)
         GLib.timeout_add(
             150,
-            lambda: self._answer(
-                request_path, {"session_handle": dbus.String(SESSION_PATH)}
-            ),
+            lambda: self._answer(request_path, {"session_handle": dbus.String(session)}),
         )
         return dbus.ObjectPath(request_path)
 
@@ -123,19 +137,28 @@ class Portal(dbus.service.Object):
     def BindShortcuts(self, session_handle, shortcuts, parent_window, options):
         request_path = self._next_request_path()
         bound = [str(entry[0]) for entry in shortcuts]
-        print("mock portal: binding %s" % bound, flush=True)
+        print("mock portal: binding %s on %s" % (bound, session_handle), flush=True)
         GLib.timeout_add(150, lambda: self._answer(request_path, {"shortcuts": shortcuts}))
         # Fire the first bound shortcut shortly after the bind is acknowledged, so
-        # the caller has already attached its activation handler.
+        # the caller has already attached its activation handler. An activation
+        # belongs to the session it was bound on, so it is held back until a
+        # second session exists: a caller that only accepts the newest session
+        # would otherwise never see this one, which is exactly the bug the
+        # two-shortcut check below is about.
         if bound:
-            GLib.timeout_add(400, lambda: self._activate(bound[0]))
+            self._pending.append((str(session_handle), bound[0]))
+            # Wait long enough for the caller to have subscribed to the session
+            # it just opened: D-Bus drops a signal nobody is listening for yet.
+            GLib.timeout_add(600, self._flush_pending)
         return dbus.ObjectPath(request_path)
 
-    def _activate(self, shortcut_id):
-        Session(self._connection, SESSION_PATH).Activated(
-            dbus.ObjectPath(SESSION_PATH), shortcut_id, dbus.UInt64(0), {}
-        )
-        print("mock portal: activated %s" % shortcut_id, flush=True)
+    def _flush_pending(self):
+        pending, self._pending = self._pending, []
+        for session, shortcut_id in pending:
+            self._sessions[session].Activated(
+                dbus.ObjectPath(session), shortcut_id, dbus.UInt64(0), {}
+            )
+            print("mock portal: activated %s on %s" % (shortcut_id, session), flush=True)
         return False
 
 

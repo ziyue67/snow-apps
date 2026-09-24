@@ -18,6 +18,7 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QEventLoop>
+#include <QSet>
 #include <QString>
 #include <QTimer>
 
@@ -75,6 +76,51 @@ void portalRoundTrip() {
     require(activated == 1, "the activation must carry the registration id it was bound with");
     qunsetenv("WAYLAND_DISPLAY");
 }
+
+// Every registration opens its own portal session, and the portal reports an
+// activation against the session it was bound on. Accepting only the newest
+// session therefore dropped every shortcut bound before it: with two shortcuts
+// registered the first one went silent, which is also what made changing one
+// shortcut stop the others from firing.
+void portalKeepsOlderSessionsAlive() {
+    if (!qEnvironmentVariableIsSet("SNOW_SHOT_TEST_PORTAL")) {
+        std::fprintf(stderr, "skipping the multi-session check: no mock portal is running\n");
+        return;
+    }
+    qputenv("WAYLAND_DISPLAY", "wayland-0");
+    const std::unique_ptr<GlobalShortcutBackend> backend =
+        snow_shot::presentation::createPlatformGlobalShortcutBackend();
+
+    QSet<int> activated;
+    backend->setActivationHandler(
+        [&activated](int registrationId) { activated.insert(registrationId); });
+
+    const auto first =
+        backend->registerShortcut(1, ShortcutBinding(QStringLiteral("Ctrl+Shift+A")));
+    const auto second =
+        backend->registerShortcut(2, ShortcutBinding(QStringLiteral("Ctrl+Shift+B")));
+    require(first.registered && second.registered, "the portal must accept both bound shortcuts");
+
+    // The mock holds activations back until a second session exists, so both
+    // arrive only if an older session is still accepted.
+    QEventLoop loop;
+    QTimer watchdog;
+    watchdog.setSingleShot(true);
+    QObject::connect(&watchdog, &QTimer::timeout, &loop, &QEventLoop::quit);
+    watchdog.start(8000);
+    QTimer poll;
+    QObject::connect(&poll, &QTimer::timeout, [&activated, &loop] {
+        if (activated.size() >= 2) {
+            loop.quit();
+        }
+    });
+    poll.start(50);
+    loop.exec();
+
+    require(activated.contains(1), "the first shortcut's activation must still be delivered");
+    require(activated.contains(2), "the second shortcut's activation must be delivered");
+    qunsetenv("WAYLAND_DISPLAY");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -109,6 +155,7 @@ int main(int argc, char** argv) {
     }
 
     portalRoundTrip();
+    portalKeepsOlderSessionsAlive();
 
     if (saved.isEmpty()) {
         qunsetenv("WAYLAND_DISPLAY");
