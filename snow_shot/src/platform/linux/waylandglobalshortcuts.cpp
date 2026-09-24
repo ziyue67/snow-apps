@@ -1,6 +1,7 @@
 #include "../../presentation/services/globalshortcutbackend_p.h"
 
 #include <QDBusArgument>
+#include <QDebug>
 #include <QDBusConnection>
 #include <QDBusError>
 #include <QDBusMessage>
@@ -318,6 +319,13 @@ class WaylandGlobalShortcutBackend final : public QObject, public GlobalShortcut
         // shortcut killed the rest. The portal also emits Activated on its
         // desktop path, where there is no session to compare and the empty path
         // is accepted.
+        // A trigger that fires but does nothing is indistinguishable from one
+        // that never fires, so every activation says which session and shortcut
+        // it arrived for before any filtering happens.
+        qInfo("global shortcut activation: session=%s shortcut=%s owned=%d",
+              session.path().isEmpty() ? "<none>" : qUtf8Printable(session.path()),
+              qUtf8Printable(shortcutId),
+              m_sessionPaths.contains(session.path()) ? 1 : 0);
         if (!session.path().isEmpty() && !m_sessionPaths.contains(session.path())) {
             return;
         }
