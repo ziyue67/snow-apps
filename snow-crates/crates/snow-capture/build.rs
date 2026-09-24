@@ -12,6 +12,26 @@ fn main() {
     println!("cargo:rerun-if-env-changed=SNOW_CAPTURE_FXC_PATH");
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "linux" {
+        // The portal screen cast backend goes through libportal, which pulls in
+        // the GLib stack, so ask pkg-config how those are linked here.
+        for library in ["libportal", "gio-2.0", "gobject-2.0", "glib-2.0"] {
+            let Ok(output) = Command::new("pkg-config").args(["--libs", library]).output() else {
+                continue;
+            };
+            if !output.status.success() {
+                continue;
+            }
+            for flag in String::from_utf8_lossy(&output.stdout).split_whitespace() {
+                if let Some(path) = flag.strip_prefix("-L") {
+                    println!("cargo:rustc-link-search=native={path}");
+                } else if let Some(name) = flag.strip_prefix("-l") {
+                    println!("cargo:rustc-link-lib={name}");
+                }
+            }
+        }
+        return;
+    }
     if target_os != "windows" {
         return;
     }
