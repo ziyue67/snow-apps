@@ -38,12 +38,17 @@ enum class ScreenshotOverlayShowMode {
     CapturedImageFramePaced,
 };
 
+// The values match `SnowCaptureBackendKind` in snow_capture.h, so a backend
+// reported by the capture layer can be carried through unchanged.
 enum class ScreenshotCaptureBackend {
     Auto = 0,
     Dxgi = 1,
     WindowsGraphicsCapture = 2,
     Gdi = 3,
     ScreenCaptureKit = 4,
+    X11 = 5,
+    /// Wayland, through the XDG desktop portal's screen cast and PipeWire.
+    Portal = 6,
 };
 
 enum class ScreenshotCapturePurpose {

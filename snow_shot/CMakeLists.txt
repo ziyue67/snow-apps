@@ -2773,12 +2773,21 @@ if(SNOW_SHOT_BUILD_TESTS)
             user32 userenv winmm windowsapp ws2_32 advapi32 bcrypt psapi)
     endif()
 
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # The worker asks the portal for a screenshot when the native backend
+        # declines a Wayland session, so the Linux helper is part of it.
+        set(_snow_shot_capture_worker_platform_sources
+            src/platform/linux/portalscreenshot.cpp)
+    else()
+        set(_snow_shot_capture_worker_platform_sources)
+    endif()
     add_executable(snow-shot-capture-worker-tests
         tests/screenshot_capture_worker_tests.cpp
         include/snow_shot/presentation/screenshotcapturecoordinator.h
         src/presentation/capture/screenshotcapturecoordinator.cpp
         src/presentation/capture/screenshotcaptureworker.cpp
         src/presentation/capture/screenshotcapturepolicy.cpp
+        ${_snow_shot_capture_worker_platform_sources}
     )
     target_include_directories(snow-shot-capture-worker-tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -2786,6 +2795,9 @@ if(SNOW_SHOT_BUILD_TESTS)
         "${SNOW_SHOT_CAPTURE_CRATES_DIR}/crates/snow-capture-c/include"
         "${SNOW_SHOT_CAPTURE_CRATES_DIR}/crates/snow-recording-c/include")
     target_link_libraries(snow-shot-capture-worker-tests PRIVATE snow_shot_storage Qt6::Gui)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_libraries(snow-shot-capture-worker-tests PRIVATE Qt6::DBus)
+    endif()
     add_test(NAME snow-shot-capture-worker-tests COMMAND snow-shot-capture-worker-tests)
 
     if(WIN32)

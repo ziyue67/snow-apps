@@ -33,6 +33,10 @@ ScreenshotCaptureBackend backendFromNative(std::uint8_t backend) {
         return ScreenshotCaptureBackend::ScreenCaptureKit;
     case SNOW_CAPTURE_BACKEND_GDI:
         return ScreenshotCaptureBackend::Gdi;
+    case SNOW_CAPTURE_BACKEND_X11:
+        return ScreenshotCaptureBackend::X11;
+    case SNOW_CAPTURE_BACKEND_PORTAL:
+        return ScreenshotCaptureBackend::Portal;
     default:
         return ScreenshotCaptureBackend::Auto;
     }

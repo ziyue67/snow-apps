@@ -9,6 +9,8 @@
 
 #include "snow_capture.h"
 
+#include "snow_shot/platform/portalscreenshot.h"
+
 namespace snow_shot::presentation::capture {
 
 ScreenshotApiMode screenshotApiModeFromValue(const char* value) noexcept {
@@ -28,6 +30,13 @@ std::uint8_t nativeBackendForNormalScreenshot(ScreenshotApiMode mode) noexcept {
 #ifdef Q_OS_MACOS
     Q_UNUSED(mode);
     return SNOW_CAPTURE_BACKEND_SCREEN_CAPTURE_KIT;
+#elif defined(Q_OS_LINUX)
+    // The API modes name Windows backends, so on Linux the request follows the
+    // session: Xlib reads the root window on X11, and a Wayland session is read
+    // through the portal's screen cast.
+    Q_UNUSED(mode);
+    return snow_shot::platform::portalScreenshotRequired() ? SNOW_CAPTURE_BACKEND_PORTAL
+                                                           : SNOW_CAPTURE_BACKEND_X11;
 #else
     switch (mode) {
     case ScreenshotApiMode::Dxgi:
