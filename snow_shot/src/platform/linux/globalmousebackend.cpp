@@ -10,6 +10,7 @@
 
 #include <QAbstractNativeEventFilter>
 #include <QCoreApplication>
+#include <QDebug>
 #include <QGuiApplication>
 #include <QPointF>
 #include <QString>
@@ -54,13 +55,20 @@ class LinuxGlobalMouseBackend final : public QObject,
                                       public GlobalMouseBackend,
                                       public QAbstractNativeEventFilter {
   public:
-    ~LinuxGlobalMouseBackend() override { stop(); }
+    ~LinuxGlobalMouseBackend() override {
+        stop();
+    }
 
     void start(Handler handler, FailureHandler failure) override {
         m_handler = std::move(handler);
         m_failure = std::move(failure);
         Display* display = x11Display();
         if (display == nullptr) {
+            // The handle comes from Qt's X11 native interface, which only exists
+            // while the X11 platform plugin is in use; under a Wayland session
+            // there is no X display here to watch with XInput2.
+            qWarning("Global mouse input needs an X11 session: the X11 platform plugin "
+                     "provides the display this backend reads");
             reportFailure(kNoDisplay);
             return;
         }
@@ -125,8 +133,7 @@ class LinuxGlobalMouseBackend final : public QObject,
         return {GlobalMousePermissionState::Status::Ready, true, true, true};
     }
 
-    bool nativeEventFilter(const QByteArray& eventType, void* message,
-                           qintptr* result) override {
+    bool nativeEventFilter(const QByteArray& eventType, void* message, qintptr* result) override {
         Q_UNUSED(result)
         if (!m_running || eventType != QByteArrayLiteral("xcb_generic_event_t")) {
             return false;
