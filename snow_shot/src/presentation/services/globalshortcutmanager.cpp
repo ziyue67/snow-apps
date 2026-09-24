@@ -87,6 +87,9 @@ QString gnomeCommandFor(GlobalShortcutAction action) {
     case GlobalShortcutAction::ScreenshotFullScreen:
         argument = QStringLiteral("--screenshot-full");
         break;
+    case GlobalShortcutAction::PinClipboardContent:
+        argument = QStringLiteral("--pin-clipboard-content");
+        break;
     default:
         return {};
     }

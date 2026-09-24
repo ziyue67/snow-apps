@@ -695,6 +695,20 @@ class ApplicationController::Impl {
         }));
     }
 
+    // Pinning the clipboard content is reachable from a keybinding too, so it
+    // needs the same argument route as the capture actions.
+    void startPinClipboardContentFromCommandLine() {
+        if (!allowPermissions(presentation::requiredPermissions(
+                presentation::GlobalShortcutAction::PinClipboardContent,
+                permissions.microphoneEnabled())))
+            return;
+        static_cast<void>(featureRouter.dispatch(FeatureFamily::Screenshot, [this]() {
+            if (ScreenshotController* controller = ensureScreenshotController()) {
+                controller->pinClipboardContentToScreen();
+            }
+        }));
+    }
+
     // The full-screen capture copies to the clipboard and needs no selection, so
     // a keybinding can reach it without any overlay interaction.
     void startFullScreenCaptureFromCommandLine() {
@@ -848,6 +862,10 @@ void ApplicationController::handleLaunchRequest(const QStringList& arguments) {
     }
     if (arguments.contains(QStringLiteral("--screenshot"))) {
         m_impl->startScreenshotFromCommandLine();
+        return;
+    }
+    if (arguments.contains(QStringLiteral("--pin-clipboard-content"))) {
+        m_impl->startPinClipboardContentFromCommandLine();
         return;
     }
     m_impl->showMainWindow();
