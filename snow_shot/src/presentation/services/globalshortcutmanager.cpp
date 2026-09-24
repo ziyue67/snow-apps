@@ -107,8 +107,28 @@ bool gnomePlatformReady() {
     return ready;
 }
 
+// Recover the registration id an entry path belongs to, or 0 when the path was
+// not written by this application.
+int gnomeRegistrationIdFromPath(const QString& path) {
+    const QString prefix = QString::fromLatin1(kGnomeKeybindingPrefix) + QStringLiteral("action-");
+    if (!path.startsWith(prefix)) {
+        return 0;
+    }
+    QString remainder = path.mid(prefix.size());
+    if (remainder.endsWith(QLatin1Char('/'))) {
+        remainder.chop(1);
+    }
+    bool ok = false;
+    const int registrationId = remainder.toInt(&ok);
+    return ok ? registrationId : 0;
+}
+
+// `liveIds` holds every registration this run still owns. Entries of other
+// applications and of those registrations are kept: only this binding's own
+// path is replaced and ids that are no longer live are pruned, so registering
+// one shortcut cannot drop the ones registered before it.
 bool gnomeRegisterShortcut(GlobalShortcutAction action, int registrationId,
-                           const shortcuts::ShortcutBinding& binding) {
+                           const shortcuts::ShortcutBinding& binding, const QList<int>& liveIds) {
     if (!gnomePlatformReady()) {
         return false;
     }
@@ -135,12 +155,22 @@ bool gnomeRegisterShortcut(GlobalShortcutAction action, int registrationId,
     }
 
     const QString prefix = QString::fromLatin1(kGnomeKeybindingPrefix);
-    paths.erase(
-        std::remove_if(paths.begin(), paths.end(),
-                       [&prefix](const QString& value) { return value.startsWith(prefix); }),
-        paths.end());
+    paths.erase(std::remove_if(paths.begin(), paths.end(),
+                               [&prefix, &liveIds, registrationId](const QString& value) {
+                                   if (!value.startsWith(prefix)) {
+                                       return false;
+                                   }
+                                   const int owner = gnomeRegistrationIdFromPath(value);
+                                   if (owner == registrationId) {
+                                       return true;
+                                   }
+                                   return !liveIds.contains(owner);
+                               }),
+                paths.end());
     const QString path = QStringLiteral("%1action-%2/").arg(prefix).arg(registrationId);
-    paths.append(path);
+    if (!paths.contains(path)) {
+        paths.append(path);
+    }
 
     QString serialized = QStringLiteral("[");
     for (int index = 0; index < paths.size(); ++index) {
@@ -640,7 +670,8 @@ class GlobalShortcutManager::Impl {
                     continue;
                 }
 #if defined(Q_OS_LINUX)
-                if (gnomeRegisterShortcut(action, registrationId, bindingValue)) {
+                if (gnomeRegisterShortcut(action, registrationId, bindingValue,
+                                          m_registrationKeysById.keys())) {
                     binding.registered = true;
                     state.bindings.push_back(binding);
                     m_activeRegistrations.insert(
