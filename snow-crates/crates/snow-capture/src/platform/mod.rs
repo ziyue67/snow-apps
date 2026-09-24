@@ -17,6 +17,9 @@ pub(crate) mod windows;
 #[cfg(target_os = "linux")]
 pub(crate) mod linux;
 
+#[cfg(target_os = "linux")]
+pub(crate) mod linux_portal;
+
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 fn unsupported_error() -> CaptureError {
     CaptureError::platform(anyhow::anyhow!(
