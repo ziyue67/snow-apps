@@ -83,7 +83,6 @@ class ScreenshotOcrGraphicsTextItem final : public QGraphicsItem {
 namespace {
 constexpr double kSelectionBorderWidth = 2.0;
 constexpr double kSelectionHandleRadius = 4.0;
-constexpr double kSelectionHandleStrokeWidth = 1.5;
 constexpr double kShowEndHandlesMinSize = 32.0;
 constexpr double kShowMidHandlesMinSize = 64.0;
 constexpr int kSelectionUpdatePadding = 10;
@@ -1522,10 +1521,17 @@ void ScreenshotCanvasRenderer::renderAfterCanvas(QPainter& painter,
             handles[handleCount++] = QPointF(selectionView.left(), selectionView.center().y());
         }
         if (handleCount != 0) {
+            // Square handles filled with the accent colour, matching the reference
+            // implementation: a stroked circle reads as an extra ring around every
+            // handle and hides the corner it marks.
             painter.setBrush(selectionAccent);
-            painter.setPen(QPen(Qt::white, kSelectionHandleStrokeWidth));
+            painter.setPen(Qt::NoPen);
             for (std::size_t index = 0; index < handleCount; ++index) {
-                painter.drawEllipse(handles[index], kSelectionHandleRadius, kSelectionHandleRadius);
+                painter.drawRoundedRect(QRectF(handles[index].x() - kSelectionHandleRadius,
+                                               handles[index].y() - kSelectionHandleRadius,
+                                               kSelectionHandleRadius * 2.0,
+                                               kSelectionHandleRadius * 2.0),
+                                        2.0, 2.0);
             }
         }
     }
