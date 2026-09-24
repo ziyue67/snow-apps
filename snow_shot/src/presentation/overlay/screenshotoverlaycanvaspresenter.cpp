@@ -91,8 +91,12 @@ void applyDisplayModelsToDisplaySession(
                 overlay->setScreenshotImageSource(
                     ScreenshotImageSource::fromLayers(std::move(layers)));
             } else {
+                // A point-based canvas describes the desktop, and the frame's pixels are a
+                // reported-ratio lie on a fractionally scaled display, so the renderer gets
+                // the ratio the frame itself has.
                 overlay->setScreenshotImage(
-                    display.image, ScreenshotGeometryMapper::displayImageSourceCanvasRect(display));
+                    display.image, ScreenshotGeometryMapper::displayImageSourceCanvasRect(display),
+                    display.canvasUsesPoints ? display.backingScale : 0.0);
             }
         }
         canvas->setViewportCamera(viewport.canvasCenter.x(), viewport.canvasCenter.y(),

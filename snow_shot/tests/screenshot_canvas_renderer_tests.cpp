@@ -427,6 +427,56 @@ void physicalViewportRenderingPreservesEveryPixelAtFractionalDprs() {
     }
 }
 
+void derivedFractionalFrameScaleFillsTheWholeOverlay() {
+    // A 125% GNOME Wayland desktop reports ratio 2 for a 1536x864 overlay while the
+    // compositor hands over 1920x1080 pixels, so the frame's own ratio is 1.25. The frozen
+    // frame has to reach every pixel of the overlay buffer; dividing it by the reported
+    // ratio leaves it at 960x540 logical and only the top-left part of the screen covered.
+    const QSize overlaySize(1536, 864);
+    const QSize frameSize(1920, 1080);
+    constexpr qreal devicePixelRatio = 2.0;
+    constexpr qreal frameScale = 1.25;
+    const QColor leftHalf(200, 30, 10);
+    const QColor rightHalf(10, 30, 200);
+
+    QImage source(frameSize, QImage::Format_RGBA8888);
+    for (int y = 0; y < source.height(); ++y) {
+        for (int x = 0; x < source.width(); ++x) {
+            source.setPixelColor(x, y, x < source.width() / 2 ? leftHalf : rightHalf);
+        }
+    }
+
+    SnowCanvasWidget canvas;
+    ScreenshotCanvasRenderer renderer(canvas);
+    renderer.setImage(source, QRectF(QPointF(), QSizeF(overlaySize)));
+    renderer.setImageViewportPhysicalSize(frameSize);
+    renderer.setImageViewportScale(frameScale);
+
+    const QSize deviceSize(qRound(overlaySize.width() * devicePixelRatio),
+                           qRound(overlaySize.height() * devicePixelRatio));
+    QImage output(deviceSize, QImage::Format_RGBA8888);
+    output.setDevicePixelRatio(devicePixelRatio);
+    output.fill(QColor(1, 2, 3));
+
+    QPainter painter(&output);
+    const QRect logicalViewport(QPoint(), overlaySize);
+    const SnowCanvasRenderContext context{
+        logicalViewport,
+        QRegion(logicalViewport),
+        QTransform(),
+        devicePixelRatio,
+    };
+    renderer.renderBeforeCanvas(painter, context);
+    painter.end();
+
+    const int farX = deviceSize.width() - 1;
+    const int farY = deviceSize.height() - 1;
+    require(output.pixelColor(0, 0) == leftHalf && output.pixelColor(0, farY) == leftHalf,
+            "the frame must start at the overlay's top-left corner");
+    require(output.pixelColor(farX, 0) == rightHalf && output.pixelColor(farX, farY) == rightHalf,
+            "the frame must reach the overlay's far corner at its derived scale");
+}
+
 QImage renderPinnedResult(const QImage& source, const QTransform& canvasToView,
                           qreal devicePixelRatio) {
     SnowCanvasWidget canvas;
@@ -3948,6 +3998,7 @@ int main(int argc, char** argv) {
     overlayPaintSkipsRedundantTransparentClearWhenRendererCoversTheRect();
     layeredImageSourceMatchesMaterializedOutput();
     physicalViewportRenderingPreservesEveryPixelAtFractionalDprs();
+    derivedFractionalFrameScaleFillsTheWholeOverlay();
     pinnedResultDownscaleUsesLinearFiltering();
     largeRasterSourceExtentsRenderWithoutFixedPointWrap();
     smoothLargeImageChunkBoundariesRemainPixelEquivalent();

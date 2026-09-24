@@ -93,6 +93,11 @@ class ScreenshotCanvasRenderer final : public SnowCanvasCustomRenderer {
     void setImage(QImage image, const QRectF& canvasRect);
     void setImageSource(ScreenshotImageSource source);
     void setImageViewportPhysicalSize(const QSize& size);
+    /// Pixels per logical unit of the frozen frame the physical viewport holds. A
+    /// fractionally scaled desktop hands over pixels at a ratio its reported device pixel
+    /// ratio does not describe, so the caller derives the ratio from the frame itself.
+    /// Zero keeps using the widget's device pixel ratio.
+    void setImageViewportScale(qreal scale);
     void setPinnedResultSurface(const QRectF& contentCanvasRect, const QRectF& surfaceCanvasRect,
                                 const ScreenshotResultStyle& style);
     void setPinnedBackgroundColor(const QColor& color);
@@ -153,11 +158,13 @@ class ScreenshotCanvasRenderer final : public SnowCanvasCustomRenderer {
     // rect maps outside the viewport, the full viewport when the display cache is
     // unsynchronized.
     [[nodiscard]] QRegion ocrFilterImageDamageRegion(const QRectF& canvasRect) const;
+    [[nodiscard]] qreal imageViewportScale(qreal devicePixelRatio) const;
 
     SnowCanvasWidget& m_canvas;
     std::uint64_t m_contentRevision = 0;
     ScreenshotImageSource m_imageSource;
     QSize m_imageViewportPhysicalSize;
+    qreal m_imageViewportScale = 0.0;
     QRectF m_pinnedContentCanvasRect;
     QRectF m_pinnedSurfaceCanvasRect;
     ScreenshotResultStyle m_pinnedResultStyle;

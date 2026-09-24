@@ -764,6 +764,10 @@ CapturedDisplayModel ScreenshotGeometryMapper::preCaptureDisplayModel(QScreen& s
     if (QGuiApplication::platformName() == QLatin1String("wayland")) {
         display.canvasRect = display.logicalRect;
         display.canvasUsesPoints = true;
+        // The canvas stays the desktop rect once the frame lands, so the selection a
+        // user started before the capture keeps its coordinates.
+        display.capturedLogicalRect = display.logicalRect;
+        display.backingScale = 1.0;
     }
 #endif
 #ifdef Q_OS_MACOS

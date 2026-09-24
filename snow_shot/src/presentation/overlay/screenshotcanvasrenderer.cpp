@@ -912,6 +912,23 @@ void ScreenshotCanvasRenderer::setImageViewportPhysicalSize(const QSize& size) {
     m_canvas.update();
 }
 
+void ScreenshotCanvasRenderer::setImageViewportScale(qreal scale) {
+    const qreal normalized = std::isfinite(scale) && scale > 0.0 ? scale : 0.0;
+    if (m_imageViewportScale == normalized) {
+        return;
+    }
+    m_imageViewportScale = normalized;
+    invalidateCachedContent();
+    m_canvas.update();
+}
+
+qreal ScreenshotCanvasRenderer::imageViewportScale(qreal devicePixelRatio) const {
+    if (std::isfinite(m_imageViewportScale) && m_imageViewportScale > 0.0) {
+        return m_imageViewportScale;
+    }
+    return devicePixelRatio;
+}
+
 void ScreenshotCanvasRenderer::setPinnedResultSurface(const QRectF& contentCanvasRect,
                                                       const QRectF& surfaceCanvasRect,
                                                       const ScreenshotResultStyle& style) {
@@ -1219,6 +1236,7 @@ void ScreenshotCanvasRenderer::reset() {
     m_imageSource = {};
     m_canvas.setBaseImageSources({});
     m_imageViewportPhysicalSize = QSize();
+    m_imageViewportScale = 0.0;
     m_pinnedContentCanvasRect = {};
     m_pinnedSurfaceCanvasRect = {};
     m_pinnedResultStyle = {};
@@ -1309,9 +1327,10 @@ bool ScreenshotCanvasRenderer::coversWidgetRect(const QRect& widgetRect) const {
     const qreal devicePixelRatio = m_canvas.devicePixelRatioF();
     if (m_imageViewportPhysicalSize.isValid() && !m_imageViewportPhysicalSize.isEmpty() &&
         devicePixelRatio > 0.0) {
+        const qreal viewportScale = imageViewportScale(devicePixelRatio);
         const QRectF targetRect(QPointF(canvasRect.topLeft()),
-                                QSizeF(m_imageViewportPhysicalSize.width() / devicePixelRatio,
-                                       m_imageViewportPhysicalSize.height() / devicePixelRatio));
+                                QSizeF(m_imageViewportPhysicalSize.width() / viewportScale,
+                                       m_imageViewportPhysicalSize.height() / viewportScale));
         return rectFCovers(targetRect, widgetRect);
     }
 
@@ -1368,17 +1387,20 @@ void ScreenshotCanvasRenderer::renderBeforeCanvas(QPainter& painter,
                                   !m_imageViewportPhysicalSize.isEmpty() &&
                                   context.devicePixelRatio > 0.0 && m_imageSource.isMaterialized();
     if (physicalViewport) {
-        const QRectF targetRect(
-            QPointF(context.viewportRect.topLeft()),
-            QSizeF(m_imageViewportPhysicalSize.width() / context.devicePixelRatio,
-                   m_imageViewportPhysicalSize.height() / context.devicePixelRatio));
+        const qreal viewportScale = imageViewportScale(context.devicePixelRatio);
+        const QRectF targetRect(QPointF(context.viewportRect.topLeft()),
+                                QSizeF(m_imageViewportPhysicalSize.width() / viewportScale,
+                                       m_imageViewportPhysicalSize.height() / viewportScale));
         if (!context.exposedRegion.intersects(targetRect.toAlignedRect())) {
             return;
         }
         painter.save();
+        // The frame's pixels only match the buffer one to one when the viewport scale equals
+        // the ratio the frame really has; a fractional desktop buffer filters the frame.
+        const QSize deviceTargetSize(qRound(targetRect.width() * context.devicePixelRatio),
+                                     qRound(targetRect.height() * context.devicePixelRatio));
         painter.setRenderHint(QPainter::SmoothPixmapTransform,
-                              m_imageSource.materializedImage.size() !=
-                                  m_imageViewportPhysicalSize);
+                              m_imageSource.materializedImage.size() != deviceTargetSize);
         paintExposedImageSlice(painter, targetRect, m_imageSource.materializedImage,
                                QRectF(m_imageSource.materializedImage.rect()),
                                context.exposedRegion);

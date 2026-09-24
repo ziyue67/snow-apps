@@ -38,7 +38,10 @@ class ScreenshotOverlayWindow final : public QWidget {
     ~ScreenshotOverlayWindow() override;
 
     SnowCanvasWidget* canvas() const;
-    void setScreenshotImage(QImage image, const QRectF& canvasRect);
+    /// Shows the frozen frame. imageScale is the ratio between the frame's pixels and the
+    /// logical units it covers when the reported device pixel ratio does not describe it;
+    /// zero lets the renderer use the widget ratio.
+    void setScreenshotImage(QImage image, const QRectF& canvasRect, qreal imageScale = 0.0);
     void setScreenshotImageSource(ScreenshotImageSource source);
     void setScreenshotMaskVisible(bool visible);
     void setScreenshotSelectionBorderColor(const QColor& color);

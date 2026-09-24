@@ -1,8 +1,11 @@
 #include "snow_shot/presentation/screenshotcapturedisplaymodelreconciler.h"
 
+#include <QGuiApplication>
 #include <QScreen>
 
+#include "captureframegeometry.h"
 #include "snow_shot/presentation/screenshotdisplaysession.h"
+#include "snow_shot/presentation/screenshotgeometry.h"
 
 #include <QHash>
 
@@ -142,6 +145,42 @@ class DisplaySlotLookup final {
     qsizetype m_nextReusableOverlayIndex = 0;
 };
 
+// The compositor hands over real pixels, but a fractionally scaled desktop reports a
+// rounded device pixel ratio: 125% arrives as a 1536x864 desktop at ratio 2 while the
+// frame is 1920x1080. Geometry derived from that report makes the canvas twice the frame
+// and leaves only part of the screen selectable, so a whole-screen frame whose pixels
+// disagree with the report switches the display to the point-based canvas the macOS
+// capture already uses, with the ratio derived from the frame itself.
+void applyDerivedFrameGeometry(CapturedDisplayModel& display,
+                               const CapturedDisplayModel& snapshot) {
+    if (snapshot.canvasUsesPoints || snapshot.image.isNull()) {
+        return;
+    }
+
+    QScreen* screen =
+        ScreenshotGeometryMapper::screenForCaptureDisplay(snapshot.name, snapshot.physicalRect);
+    if (screen == nullptr && QGuiApplication::screens().size() == 1) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (screen == nullptr) {
+        return;
+    }
+
+    const auto derived = snow_shot::presentation::capture::wholeScreenFrameGeometry(
+        snapshot.image.size(), screen->geometry(), screen->devicePixelRatio());
+    if (!derived.has_value()) {
+        return;
+    }
+
+    display.canvasUsesPoints = true;
+    display.capturedLogicalRect = derived->logicalRect;
+    display.backingScale = derived->backingScale;
+    display.canvasRect = derived->logicalRect;
+    // Point coordinates and the canvas then share one origin; the pixel extent the frame
+    // describes stays in place for the pixel contract.
+    display.physicalRect.moveTopLeft(derived->logicalRect.topLeft());
+}
+
 void applySnapshotToDisplay(CapturedDisplayModel& display, const CapturedDisplayModel& snapshot) {
     display.stableId = snapshot.stableId;
     display.name = snapshot.name;
@@ -157,6 +196,7 @@ void applySnapshotToDisplay(CapturedDisplayModel& display, const CapturedDisplay
     display.screen = nullptr;
     display.image = snapshot.image;
     display.active = true;
+    applyDerivedFrameGeometry(display, snapshot);
 }
 
 void applySnapshotsToDisplaySession(ScreenshotDisplaySession& displaySession,

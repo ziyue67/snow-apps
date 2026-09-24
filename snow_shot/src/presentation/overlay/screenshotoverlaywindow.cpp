@@ -108,15 +108,18 @@ SnowCanvasWidget* ScreenshotOverlayWindow::canvas() const {
     return m_canvas;
 }
 
-void ScreenshotOverlayWindow::setScreenshotImage(QImage image, const QRectF& canvasRect) {
+void ScreenshotOverlayWindow::setScreenshotImage(QImage image, const QRectF& canvasRect,
+                                                 qreal imageScale) {
     if (m_screenshotRenderer != nullptr) {
         // Draw the frozen frame from its physical size and let the renderer divide by the
-        // device pixel ratio. The canvas-to-view scale is derived from the display geometry,
-        // which on a fractional display scale does not match the frame: the frame then lands
-        // at that scale squared and only fills part of the overlay.
+        // ratio the frame really has. The canvas-to-view scale is derived from the display
+        // geometry, which on a fractional display scale does not match the reported device
+        // pixel ratio: dividing by that report lands the frame at part of the overlay and
+        // leaves only that part of the screen selectable.
         const QSize frameSize = image.size();
         m_screenshotRenderer->setImage(std::move(image), canvasRect);
         m_screenshotRenderer->setImageViewportPhysicalSize(frameSize);
+        m_screenshotRenderer->setImageViewportScale(imageScale);
     }
 }
 

@@ -7276,6 +7276,19 @@ if(SNOW_SHOT_BUILD_TESTS)
     snow_shot_import_offscreen_platform(snow-shot-selection-render-tests)
     add_test(NAME snow-shot-selection-render-tests COMMAND snow-shot-selection-render-tests)
     set_tests_properties(snow-shot-selection-render-tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "unit")
+
+    add_executable(snow-shot-screenshot-fractional-scale-tests
+        tests/screenshot_fractional_scale_tests.cpp
+        src/presentation/core/screenshotgeometry.cpp
+        src/presentation/capture/screenshotcapturedisplaymodelreconciler.cpp
+        src/presentation/services/screenshotsourceimagecomposer.cpp)
+    target_include_directories(snow-shot-screenshot-fractional-scale-tests PRIVATE include
+        "${SNOW_SHOT_CAPTURE_CRATES_DIR}/crates/snow-capture-c/include")
+    target_link_libraries(snow-shot-screenshot-fractional-scale-tests PRIVATE Qt6::Widgets)
+    snow_shot_import_offscreen_platform(snow-shot-screenshot-fractional-scale-tests)
+    add_test(NAME snow-shot-screenshot-fractional-scale-tests
+        COMMAND snow-shot-screenshot-fractional-scale-tests)
+    set_tests_properties(snow-shot-screenshot-fractional-scale-tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "unit")
 endif()
 
 if(APPLE)

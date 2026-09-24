@@ -99,7 +99,9 @@ void ScreenshotToolbarPresenter::updateSelectionToolbarState(
     {
         SNOW_SHOT_CAPTURE_PERF_SCOPE("toolbar.set_selection_state");
         QSize outputPixels;
-#ifdef Q_OS_MACOS
+        // A point-based canvas — macOS, and a Wayland desktop whose reported ratio does not
+        // describe the frame — stores the selection in desktop points, so the size readout
+        // needs the pixel extent the selection really has.
         bool points = false;
         m_displaySession.forEachImageSource([&](qsizetype, const CapturedDisplayModel& display) {
             points |= display.canvasUsesPoints;
@@ -107,7 +109,6 @@ void ScreenshotToolbarPresenter::updateSelectionToolbarState(
         if (points)
             outputPixels =
                 screenshotSelectionRenderSpec(m_displaySession, state.selectionPixels).pixelSize;
-#endif
         toolbarWidget->setSelectionState(
             state.selectionPixels, state.aspectRatioLocked, state.cornerRadius, state.shadowWidth,
             state.intelligentSelecting ? ScreenshotSelectionToolbarWidget::DisplayMode::SizeOnly
