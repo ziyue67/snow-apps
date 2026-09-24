@@ -42,10 +42,7 @@ unsafe extern "C" {
     fn g_main_context_unref(context : *mut c_void);
     fn g_main_context_push_thread_default(context : *mut c_void);
     fn g_main_context_pop_thread_default(context : *mut c_void);
-    fn g_main_loop_new(context : *mut c_void, is_running : c_int) -> * mut c_void;
-    fn g_main_loop_run(loop_ : *mut c_void);
-    fn g_main_loop_quit(loop_ : *mut c_void);
-    fn g_main_loop_unref(loop_ : *mut c_void);
+    fn g_main_context_iteration(context : *mut c_void, may_block : c_int) -> c_int;
 }
 
 /// The portal output type for monitors.
@@ -54,12 +51,20 @@ const XDP_OUTPUT_MONITOR : c_int = 1;
 const XDP_CURSOR_MODE_EMBEDDED : c_int = 2;
 /// `XDP_PERSIST_MODE_NONE`: nothing about the session is remembered.
 const XDP_PERSIST_MODE_NONE : c_int = 0;
+/// How long to keep asking the portal before giving up. The user has to answer a
+/// permission prompt, so this is generous.
+const PORTAL_TIMEOUT_MS : u128 = 120_000;
 
-unsafe extern "C" fn on_created(_source : *mut c_void, result : *mut c_void, data : *mut c_void) {
+/// Where the portal writes the reply it posts.
+struct CreateState {
+    result : *mut c_void,
+}
+
+unsafe extern "C" fn
+on_created(_source : *mut c_void, result : *mut c_void, data : *mut c_void) {
     unsafe {
         let state = data.cast::<CreateState>();
         (*state).result = result;
-        g_main_loop_quit((*state).loop_);
     }
 }
 
@@ -67,20 +72,31 @@ unsafe extern "C" fn on_started(_source : *mut c_void, result : *mut c_void, dat
     unsafe {
         let state = data.cast::<CreateState>();
         (*state).result = result;
-        g_main_loop_quit((*state).loop_);
     }
 }
 
-struct CreateState {
-    loop_ : *mut c_void, result : *mut c_void,
+/// Drain the context until the portal answers.
+///
+/// A main loop is not used on purpose: it returns as soon as the context has
+/// nothing attached, which happened before the portal posted its reply and left
+/// the result null, and finishing with a null result is a crash.
+fn wait_for_result(context : *mut c_void, state : &CreateState) -> bool {
+    let started = std::time::Instant::now();
+    while
+        state.result.is_null() {
+            while
+                unsafe{g_main_context_iteration(context, 0)} != 0 {}
+            if started
+                .elapsed().as_millis() > PORTAL_TIMEOUT_MS {
+                    return false;
+                }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    true
 }
 
 /// Open a screen cast session and hand back the pipewire remote fd.
-///
-/// The portal answers asynchronously, so each call is driven by a main loop that
-/// the callback quits.
-pub(crate) fn open_portal_stream()
-    ->anyhow::Result<c_int> {
+pub(crate) fn open_portal_stream()->anyhow::Result<c_int> {
     unsafe {
         let portal = xdp_portal_new();
         if portal
@@ -88,27 +104,28 @@ pub(crate) fn open_portal_stream()
                 anyhow::bail !("could not create a portal handle");
             }
 
-        // The default context belongs to the thread that started the process, so
-        // drive a context of our own instead of running that one from here.
+        // The portal posts its reply on the thread default context, so make this
+        // call's own context that one for the duration.
         let context = g_main_context_new();
         g_main_context_push_thread_default(context);
-        let loop_ = g_main_loop_new(context, 0);
+
         let mut state = CreateState{
-            loop_,
             result : std::ptr::null_mut(),
         };
-
         xdp_portal_create_screencast_session(
             portal, XDP_OUTPUT_MONITOR, 0, XDP_CURSOR_MODE_EMBEDDED, XDP_PERSIST_MODE_NONE,
             std::ptr::null(), std::ptr::null_mut(), Some(on_created),
             std::ptr::from_mut(&mut state).cast(), );
-        g_main_loop_run(loop_);
+        if !wait_for_result (context, &state) {
+            g_main_context_pop_thread_default(context);
+            g_main_context_unref(context);
+            anyhow::bail !("the portal did not answer in time");
+        }
 
         let mut error : * mut GError = std::ptr::null_mut();
         let session = xdp_portal_create_screencast_session_finish(portal, state.result, &mut error);
         if session
             .is_null() {
-                g_main_loop_unref(loop_);
                 g_main_context_pop_thread_default(context);
                 g_main_context_unref(context);
                 anyhow::bail !("the portal refused to create a screen cast session");
@@ -117,8 +134,11 @@ pub(crate) fn open_portal_stream()
         state.result = std::ptr::null_mut();
         xdp_session_start(session, std::ptr::null_mut(), std::ptr::null_mut(), Some(on_started),
                           std::ptr::from_mut(&mut state).cast(), );
-        g_main_loop_run(loop_);
-        g_main_loop_unref(loop_);
+        if !wait_for_result (context, &state) {
+            g_main_context_pop_thread_default(context);
+            g_main_context_unref(context);
+            anyhow::bail !("the portal did not answer in time");
+        }
 
         if xdp_session_start_finish (session, state.result, &mut error)
             == 0 {
