@@ -15,6 +15,8 @@ rayon.workspace = true
 num_cpus.workspace = true
 nalgebra = { version = "0.33.3", default-features = false, features = ["std"] }
 crossbeam-channel.workspace = true
+pipewire = "0.10.1"
+ashpd = { version = "0.13.13", default-features = false, features = ["async-io"] }
 
 
 [dev-dependencies]
