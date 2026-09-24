@@ -27,9 +27,19 @@ DirectCaptureFrame captureDirectTarget(const DirectCaptureRequest& request) {
         QString portalError;
         const QImage image = snow_shot::platform::takePortalScreenshot(&portalError);
         if (!image.isNull()) {
+            // The history draft is built from `displays`, so the portal frame has
+            // to describe the screen it captured or the capture is dropped from
+            // the history even though the image itself is fine.
+            DirectCaptureDisplay display;
+            display.image = image;
+            display.physicalBounds = QRect(QPoint(0, 0), image.size());
+            display.logicalBounds = display.physicalBounds;
+            display.stableId = QStringLiteral("portal");
+            display.name = QStringLiteral("portal");
             result.image = image;
-            result.physicalBounds = QRect(QPoint(0, 0), image.size());
-            result.identity = QStringLiteral("portal");
+            result.physicalBounds = display.physicalBounds;
+            result.identity = display.stableId;
+            result.displays.push_back(display);
             return result;
         }
         qWarning("Portal screenshot failed: %s", qPrintable(portalError));
