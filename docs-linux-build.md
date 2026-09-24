@@ -256,6 +256,14 @@ selects it whenever `WAYLAND_DISPLAY` is set. The compositor may refuse the
 request, and the portal has no unbind, so unregistering only drops the local
 mapping.
 
+An activation belongs to the session that bound its shortcut, and every
+registration opens its own session, so `onActivated` accepts any session this
+backend owns. Comparing against only the newest one dropped every shortcut
+bound before it: the second registration silenced the first, and rebinding one
+shortcut silenced the rest. `tests/mock_portal.py` gives each session its own
+path and holds an activation until a later session exists, so
+`snow-shot-global-shortcut-backend-tests` fails if that regresses.
+
 Two details are load-bearing. The `a(sa{sv})` argument needs a declared type
 registered through `qDBusRegisterMetaType`; streaming the array by hand left
 libdbus expecting `au` and aborting mid-message. And `Q_DECLARE_METATYPE` has to
