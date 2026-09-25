@@ -2,6 +2,14 @@
 
 #include <QApplication>
 #include <QEventLoop>
+#include <QLoggingCategory>
+
+namespace {
+// Keeps the own-window policy diagnosable: a capture that still contains one of this
+// process's windows is a visibility question, and the counts say whether the guard saw the
+// window at all.
+Q_LOGGING_CATEGORY(ownWindowsLog, "snow_shot.capture.ownwindows")
+} // namespace
 
 CaptureOwnWindowsGuard::CaptureOwnWindowsGuard(bool hideWindows) {
     if (!hideWindows || QApplication::instance() == nullptr) {
@@ -18,6 +26,8 @@ CaptureOwnWindowsGuard::CaptureOwnWindowsGuard(bool hideWindows) {
         m_hiddenWindows.append({widget, widget->windowState()});
         widget->hide();
     }
+
+    qCInfo(ownWindowsLog) << "hidden" << m_hiddenWindows.size() << "own window(s) for the capture";
 
     if (!m_hiddenWindows.isEmpty()) {
         // The windows have to leave the screen before the compositor composes the frame the
@@ -56,5 +66,6 @@ void CaptureOwnWindowsGuard::restore() {
     if (!m_hiddenWindows.isEmpty() && QApplication::instance() != nullptr) {
         QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     }
+    qCInfo(ownWindowsLog) << "restored" << m_hiddenWindows.size() << "own window(s)";
     m_hiddenWindows.clear();
 }

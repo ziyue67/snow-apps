@@ -121,6 +121,10 @@ constexpr auto kSaveMessageKey = "screenshot-save";
 constexpr auto kPinClipboardMessageKey = "screenshot-pin-clipboard";
 constexpr int kRecaptureHideTimeoutMs = 1000;
 constexpr int kRecaptureHidePollIntervalMs = 10;
+// Time a hidden window needs before a compositor stops handing it over. The unmap request
+// and the compositor's commit are asynchronous, so a capture that hid one waits for a few
+// frames instead of reading the screen while the window is still in it.
+constexpr int kOwnWindowHideSettleMs = 150;
 
 template <typename Function> class ScopeExit final {
   public:
@@ -517,6 +521,8 @@ struct ScreenshotController::Impl final : public ScreenshotToolbarCommandSink,
     // Hides this process's own windows while the capture reads the screen, so a capture
     // started from the tray menu or another own window cannot contain it.
     std::unique_ptr<CaptureOwnWindowsGuard> m_captureOwnWindowsGuard;
+    // True while a capture waits for those windows to leave the screen before it starts.
+    bool m_ownWindowSettlePending = false;
     QString m_pendingHistoryEditRecordId;
     quint64 m_imageExportGeneration = 0;
     QSet<quint64> m_activeImageExports;
@@ -4303,6 +4309,11 @@ bool ScreenshotController::Impl::canBeginCapture() const {
          m_captureState.sessionState != ScreenshotSessionState::IdlePrepared)) {
         return false;
     }
+    // A capture waiting for this process's own windows to leave the screen has not started
+    // yet, so a second trigger must not queue another one behind it.
+    if (m_ownWindowSettlePending) {
+        return false;
+    }
     return m_captureWorkflow != nullptr;
 }
 
@@ -4334,6 +4345,8 @@ bool ScreenshotController::Impl::beginCapture(PendingSelectionAction action,
     // menu and the screenshot is not the desktop the user selected. The reference
     // implementation hides its own windows during a capture for the same reason.
     m_captureOwnWindowsGuard = std::make_unique<CaptureOwnWindowsGuard>();
+    const bool ownWindowsWereHidden =
+        m_captureOwnWindowsGuard != nullptr && m_captureOwnWindowsGuard->hidAnyWindow();
     emit owner.captureAvailabilityChanged(false);
     using ToolbarPreparation = ScreenshotCaptureWorkflow::ToolbarPreparation;
     using ToolbarVisibility = ScreenshotCaptureWorkflow::ToolbarVisibility;
@@ -4341,9 +4354,25 @@ bool ScreenshotController::Impl::beginCapture(PendingSelectionAction action,
                                action == PendingSelectionAction::RecognizeText ||
                                action == PendingSelectionAction::RecognizeTextTranslation ||
                                action == PendingSelectionAction::Save;
-    m_captureWorkflow->startCapture(
-        mode, entersEditing ? ToolbarPreparation::Prewarm : ToolbarPreparation::OnDemand,
-        entersEditing ? ToolbarVisibility::ShowAfterSelection : ToolbarVisibility::Suppressed);
+    const QPointer<ScreenshotController> receiver(&owner);
+    auto startWorkflow = [this, receiver, mode, entersEditing]() {
+        m_ownWindowSettlePending = false;
+        if (receiver.isNull() || m_captureWorkflow == nullptr) {
+            return;
+        }
+        m_captureWorkflow->startCapture(
+            mode, entersEditing ? ToolbarPreparation::Prewarm : ToolbarPreparation::OnDemand,
+            entersEditing ? ToolbarVisibility::ShowAfterSelection : ToolbarVisibility::Suppressed);
+    };
+    if (ownWindowsWereHidden) {
+        // A compositor keeps showing a window for a frame or two after its unmap, so reading
+        // the screen at once can still catch the window that was just hidden. Let the unmap
+        // settle first; a capture that hid nothing starts immediately as before.
+        m_ownWindowSettlePending = true;
+        QTimer::singleShot(kOwnWindowHideSettleMs, &owner, std::move(startWorkflow));
+        return true;
+    }
+    startWorkflow();
     return true;
 }
 
