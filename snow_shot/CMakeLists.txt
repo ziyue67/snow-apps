@@ -1189,6 +1189,7 @@ set(PROJECT_CXX_SOURCES
     src/presentation/capture/screenshotcapturepolicy.cpp
     src/presentation/capture/screenshotcaptureperfinstrumentation.cpp
     src/presentation/capture/screenshotcaptureworkflow.cpp
+    src/presentation/capture/captureownwindowsguard.cpp
     src/presentation/capture/screenshotglobalmousedrag.cpp
     src/presentation/capture/adaptivescrollingcapturecadence.h
     src/presentation/capture/windowcaptureexclusion.h
@@ -7289,6 +7290,15 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_test(NAME snow-shot-screenshot-fractional-scale-tests
         COMMAND snow-shot-screenshot-fractional-scale-tests)
     set_tests_properties(snow-shot-screenshot-fractional-scale-tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "unit")
+
+    add_executable(snow-shot-capture-own-windows-tests
+        tests/capture_own_windows_guard_tests.cpp
+        src/presentation/capture/captureownwindowsguard.cpp)
+    target_include_directories(snow-shot-capture-own-windows-tests PRIVATE include)
+    target_link_libraries(snow-shot-capture-own-windows-tests PRIVATE Qt6::Widgets)
+    snow_shot_import_offscreen_platform(snow-shot-capture-own-windows-tests)
+    add_test(NAME snow-shot-capture-own-windows-tests COMMAND snow-shot-capture-own-windows-tests)
+    set_tests_properties(snow-shot-capture-own-windows-tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "unit")
 endif()
 
 if(APPLE)

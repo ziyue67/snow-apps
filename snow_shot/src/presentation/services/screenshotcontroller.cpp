@@ -17,6 +17,7 @@
 #include "snow_shot/presentation/screenshotcaptureworkflow.h"
 #include "snow_shot/presentation/screenshotcanvascolorsampler.h"
 #include "snow_shot/presentation/screenshotcanvascolorsamplerwindow.h"
+#include "snow_shot/presentation/captureownwindowsguard.h"
 #include "snow_shot/presentation/screenshotclipboardservice.h"
 #include "snow_shot/presentation/screenshotclipboardcontent.h"
 #include "snow_shot/presentation/screenshotfilepinbatch.h"
@@ -513,6 +514,9 @@ struct ScreenshotController::Impl final : public ScreenshotToolbarCommandSink,
     QElapsedTimer m_recaptureHideTimer;
     quint64 m_recaptureGeneration = 0;
     bool m_recaptureBusy = false;
+    // Hides this process's own windows while the capture reads the screen, so a capture
+    // started from the tray menu or another own window cannot contain it.
+    std::unique_ptr<CaptureOwnWindowsGuard> m_captureOwnWindowsGuard;
     QString m_pendingHistoryEditRecordId;
     quint64 m_imageExportGeneration = 0;
     QSet<quint64> m_activeImageExports;
@@ -1329,6 +1333,10 @@ void ScreenshotController::Impl::createCaptureWorkflow() {
                 },
             },
             [this]() {
+                // The session is over, so nothing has to keep this process's own windows off
+                // the screen any longer. Holding them until here also covers a recapture,
+                // which grabs the screen again while the overlay is up.
+                m_captureOwnWindowsGuard.reset();
                 m_pendingHistoryEditRecordId.clear();
                 resetPendingCaptureRequest();
                 QTimer::singleShot(0, &owner, [this]() {
@@ -4321,6 +4329,11 @@ bool ScreenshotController::Impl::beginCapture(PendingSelectionAction action,
     if (m_historyService != nullptr) {
         m_historyService->resetCaptureNavigation();
     }
+    // The capture reads whatever the compositor shows, so this process's own windows have to
+    // leave the screen first: a capture started from the tray menu otherwise contains that
+    // menu and the screenshot is not the desktop the user selected. The reference
+    // implementation hides its own windows during a capture for the same reason.
+    m_captureOwnWindowsGuard = std::make_unique<CaptureOwnWindowsGuard>();
     emit owner.captureAvailabilityChanged(false);
     using ToolbarPreparation = ScreenshotCaptureWorkflow::ToolbarPreparation;
     using ToolbarVisibility = ScreenshotCaptureWorkflow::ToolbarVisibility;

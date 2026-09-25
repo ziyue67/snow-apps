@@ -8,6 +8,11 @@
 
 namespace snow_shot::presentation {
 namespace {
+// Time a hidden window needs before a compositor stops handing it over. One frame would do
+// on paper, but the unmap request and the compositor's commit are asynchronous, so wait for
+// a few frames instead of racing them.
+constexpr int kOwnWindowHideSettleMs = 150;
+
 QString queueError() {
     return QCoreApplication::translate("DirectCaptureController",
                                        "The capture operation could not be queued");
@@ -37,6 +42,7 @@ void DirectCaptureWorkflow::shutdown() {
     m_phase = Phase::Stopped;
     m_queue.clear();
     m_frame = {};
+    m_ownWindowsGuard.reset();
 }
 
 void DirectCaptureWorkflow::report(const QString& error, bool warning) {
@@ -48,25 +54,40 @@ void DirectCaptureWorkflow::startNext() {
     if (m_phase != Phase::Idle || m_queue.empty())
         return;
     m_phase = Phase::Acquiring;
+    // The frame is read from the composited screen, so this process's own windows have to
+    // leave it first: a full-screen capture started from a keybinding otherwise contains
+    // the settings window or the tray menu it was started from.
+    m_ownWindowsGuard = std::make_unique<CaptureOwnWindowsGuard>();
     const quint64 generation = ++m_generation;
     const QPointer<DirectCaptureWorkflow> self(this);
-    auto complete = [self, generation](DirectCaptureFrame frame) {
+    auto acquire = [this, self, generation]() {
         if (!self || self->m_generation != generation || self->m_phase != Phase::Acquiring)
             return;
-        if (!frame.isValid()) {
-            self->report(frame.error.isEmpty()
-                             ? QCoreApplication::translate("DirectCaptureController",
-                                                           "The capture returned an invalid image")
-                             : frame.error);
-            if (self)
-                self->finish();
-            return;
-        }
-        self->m_frame = std::move(frame);
-        self->saveOrCopy();
+        auto complete = [self, generation](DirectCaptureFrame frame) {
+            if (!self || self->m_generation != generation || self->m_phase != Phase::Acquiring)
+                return;
+            if (!frame.isValid()) {
+                self->report(frame.error.isEmpty() ? QCoreApplication::translate(
+                                                         "DirectCaptureController",
+                                                         "The capture returned an invalid image")
+                                                   : frame.error);
+                if (self)
+                    self->finish();
+                return;
+            }
+            self->m_frame = std::move(frame);
+            self->saveOrCopy();
+        };
+        if (!m_ports.acquire(m_queue.front(), complete))
+            complete(DirectCaptureFrame{{}, {}, {}, 0, queueError()});
     };
-    if (!m_ports.acquire(m_queue.front(), complete))
-        complete(DirectCaptureFrame{{}, {}, {}, 0, queueError()});
+    if (m_ownWindowsGuard->hidAnyWindow()) {
+        // A compositor keeps showing a window for a frame or two after it is hidden, so the
+        // unmap has to settle before the screen is read or the window lands in the picture.
+        QTimer::singleShot(kOwnWindowHideSettleMs, this, std::move(acquire));
+        return;
+    }
+    acquire();
 }
 
 void DirectCaptureWorkflow::saveOrCopy() {
@@ -142,6 +163,8 @@ void DirectCaptureWorkflow::finish() {
     m_queue.pop_front();
     m_frame = {};
     m_phase = Phase::Idle;
+    // The grab is over, so the windows hidden for it can return.
+    m_ownWindowsGuard.reset();
     QTimer::singleShot(0, this, [this]() { startNext(); });
 }
 } // namespace snow_shot::presentation

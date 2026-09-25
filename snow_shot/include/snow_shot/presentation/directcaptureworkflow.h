@@ -1,6 +1,7 @@
 #ifndef SNOW_SHOT_PRESENTATION_DIRECTCAPTUREWORKFLOW_H
 #define SNOW_SHOT_PRESENTATION_DIRECTCAPTUREWORKFLOW_H
 
+#include "snow_shot/presentation/captureownwindowsguard.h"
 #include "snow_shot/presentation/screenshotpdfexport.h"
 #include <QDateTime>
 #include <QImage>
@@ -11,6 +12,7 @@
 
 #include <deque>
 #include <functional>
+#include <memory>
 
 namespace snow_shot::presentation {
 enum class DirectCaptureTarget { FocusedWindow, CurrentMonitor };
@@ -91,6 +93,10 @@ class DirectCaptureWorkflow final : public QObject {
     DirectCaptureFrame m_frame;
     Phase m_phase = Phase::Idle;
     quint64 m_generation = 0;
+    // A capture reads whatever the compositor shows, so this process's own windows have to
+    // leave the screen for the frame it returns — the overlay capture hides them for the
+    // same reason.
+    std::unique_ptr<CaptureOwnWindowsGuard> m_ownWindowsGuard;
 };
 } // namespace snow_shot::presentation
 
